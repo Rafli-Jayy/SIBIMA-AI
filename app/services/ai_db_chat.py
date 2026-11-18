@@ -13,6 +13,28 @@ from app.ui.ai.mock_responder import MockEvent
 from app.services.gemini_client import _opening_state
 from app.services.hybrid_evidence import HybridEvidence, _DOCUMENT_REQUEST
 
+# Safe diagnostics: classify only exact messages authored by this module.
+# Never echo exception text (which could come from SQL or a remote provider).
+_RUNTIME_CODES = {
+    "Urutan langkah Gemini tidak valid.": "urutan-event-stream",
+    "Event penutup tidak sesuai.": "penutup-step-stream",
+    "Gemini meminta aksi tanpa fungsi yang sah.": "aksi-tanpa-function-call",
+    "Gemini tidak menghasilkan jawaban final.": "jawaban-final-tidak-ada",
+    "Gemini mencampur jawaban parsial dengan panggilan fungsi.": "teks-dan-function-call",
+    "Panggilan fungsi tidak memiliki status yang sah.": "status-fungsi-tidak-sah",
+    "Gemini mengirim status terminal tidak sesuai.": "status-terminal-tidak-sah",
+    "Status terminal Gemini tidak konsisten.": "status-event-tidak-konsisten",
+    "Pemulihan Gemini tidak menghasilkan status lengkap.": "pemulihan-tanpa-status",
+    "Pemulihan Gemini tidak mengembalikan langkah lengkap.": "pemulihan-tanpa-langkah",
+    "Pemulihan Gemini meminta aksi tanpa panggilan fungsi.": "pemulihan-aksi-tanpa-call",
+    "Pemulihan Gemini tidak menghasilkan jawaban final yang sah.": "pemulihan-jawaban-tidak-valid",
+    "Gemini melaporkan kegagalan interaksi.": "interaksi-gagal",
+}
+
+def _runtime_code(exc: Exception) -> str:
+    return _RUNTIME_CODES.get(str(exc), "tidak-ada") if type(exc) is RuntimeError else "tidak-ada"
+
+
 def _safe_diagnostic(exc: Exception, *, stage: str, event_type: str = "tidak-ada", reason: str = "tidak-ada", terminal_status: str = "tidak-ada", step_types: str = "tidak-ada") -> str:
     """Metadata only. Never include exception messages, SQL, arguments or user data."""
     kind = type(exc).__name__
@@ -63,8 +85,105 @@ def _safe_diagnostic(exc: Exception, *, stage: str, event_type: str = "tidak-ada
     return "[Diagnostik Patch 3: " + "; ".join(info) + "]"
 
 
-MAX_TOOL_CALLS_PER_TURN = 4
-MAX_MODEL_ROUNDS = 4
+# One schema lookup, one multi-query, plus one optional validation recovery.
+# The limits are hard caps, not Gemini-controlled configuration.
+MAX_TOOL_CALLS_PER_TURN = 10
+MAX_MODEL_ROUNDS = 9
+MAX_PLAN_RECOVERIES = 1
+PLANNER_TOOLS = frozenset({"query_sibima_general", "query_sibima_multi"})
+
+
+def _planner_feedback(exc: ValueError) -> dict:
+    """Only safe, app-authored error categories go to Gemini, never raw errors."""
+    message = str(exc).lower()
+    if any(word in message for word in ("relasi", "join", "jalur")):
+        return {"status": "rencana_ditolak", "kode": "jalur_relasi",
+                "petunjuk": "Baca FK dari describe_sibima_schema. Jika fakta berbeda, gunakan query_sibima_multi. Jangan membuat JOIN sendiri."}
+    if any(word in message for word in ("kolom", "tabel", "metadata")):
+        return {"status": "rencana_ditolak", "kode": "skema_tidak_cocok",
+                "petunjuk": "Periksa ulang nama kolom dan tabel yang muncul pada katalog aman, lalu buat rencana baru."}
+    if any(word in message for word in ("filter", "tanggal", "teks", "nilai", "operator", "boolean", "angka")):
+        return {"status": "rencana_ditolak", "kode": "filter_tidak_valid",
+                "petunjuk": (
+                    "Periksa kolom filter pada katalog_diizinkan serta tipe datanya. "
+                    "Bentuk wajib: filter=[{kolom:'tabel.kolom',op:'eq',nilai:'...'}]. "
+                    "Untuk boolean gunakan nilai true/false; untuk tanggal ISO YYYY-MM-DD; "
+                    "untuk enum gunakan nilai yang benar-benar ditetapkan pada skema. "
+                    "Operator IN memakai nilai_daftar (array 1-10), is_null memakai nilai true/false. "
+                    "Jangan mengarang status atau menambah properti selain kolom, op, nilai, nilai_daftar."
+                )}
+    if any(word in message for word in ("agregat", "dimensi", "grup", "kunci")):
+        return {"status": "rencana_ditolak", "kode": "agregasi_atau_grup",
+                "petunjuk": "Periksa dimensi, aturan HAVING, dan kesesuaian kunci yang sama pada setiap fakta."}
+    return {"status": "rencana_ditolak", "kode": "rencana_tidak_valid",
+            "petunjuk": "Susun ulang rencana dari metadata yang diizinkan. Jika pertanyaan ambigu, minta kriteria; jangan mengarang angka."}
+
+
+
+
+def _schema_hint_from_catalog(controller, arguments: object) -> dict | None:
+    """Retrieve *authorized schema metadata*, never data rows or model SQL.
+
+    A rejected Gemini plan often references a nonexistent `table.column` or
+    omits an ambiguous FK route. Give exactly one short, role-redacted catalog
+    reminder instead of allowing the model to guess column names again.
+    """
+    try:
+        declared = controller.declarations()
+        if not any(isinstance(item, dict) and item.get("name") == "describe_sibima_schema"
+                   for item in declared):
+            return None
+        # Controller enforces the authenticated principal and DB READ ONLY again.
+        metadata = controller.execute("describe_sibima_schema", {})
+        if not isinstance(metadata, dict) or metadata.get("status") != "ok":
+            return None
+        tables = metadata.get("tabel")
+        edges = metadata.get("relasi")
+        if not isinstance(tables, dict) or not isinstance(edges, list):
+            return None
+        requested = set()
+
+        def walk(value, depth=0):
+            if depth > 8:
+                return
+            if isinstance(value, dict):
+                for key, val in value.items():
+                    if key == "tabel_utama" and isinstance(val, str) and val in tables:
+                        requested.add(val)
+                    elif key in ("kolom", "kolom_output", "dimensi", "urutan", "periode", "filter", "agregasi", "rencana", "analisis"):
+                        walk(val, depth + 1)
+            elif isinstance(value, list):
+                for val in value[:12]:
+                    walk(val, depth + 1)
+            elif isinstance(value, str) and re.fullmatch(r"[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*", value):
+                table = value.split(".")[0]
+                if table in tables:
+                    requested.add(table)
+
+        walk(arguments)
+        if not requested:
+            return None
+        # Include direct FK neighbors to show how an explicit path may be chosen.
+        selected = set(requested)
+        for edge in edges:
+            if not isinstance(edge, dict):
+                continue
+            child, parent = edge.get("child"), edge.get("parent")
+            if child in requested and parent in tables:
+                selected.add(parent)
+        selected = sorted(selected)[:8]
+        return {
+            "tabel": {name: tables[name] for name in selected},
+            "relasi": [
+                {key: edge[key] for key in ("name", "child", "parent") if key in edge}
+                for edge in edges if isinstance(edge, dict) and
+                edge.get("child") in selected and edge.get("parent") in selected
+            ][:24],
+            "catatan": "Ini metadata yang diizinkan role, bukan data pengguna. Gunakan nama kolom dan FK persis."
+        }
+    except Exception:
+        # Metadata assistance is optional; security must never depend on it.
+        return None
 
 
 def _document_search_query(question: str) -> str:
@@ -208,6 +327,11 @@ class DatabaseFunctionChat:
         evidence = HybridEvidence(original_query=query)
         total_tools = 0
         document_retry_used = False
+        planner_recoveries = 0
+        planner_attempted = False
+        planner_succeeded = False
+        last_plan_error = "tidak-ada"
+        planner_outcome = None
         stage = "memulai-interaksi"
         last_event = "tidak-ada"
         reason = "tidak-ada"
@@ -392,6 +516,19 @@ class DatabaseFunctionChat:
                         reason = "tanpa-jawaban-atau-tool"
                         raise RuntimeError("Gemini tidak menghasilkan jawaban final.")
                     refusal = evidence.refusal(query)
+                    # An unsuccessful plan is not evidence of any database fact.
+                    # Never accept a final prose/number answer after a rejected plan
+                    # unless an authorized database tool subsequently succeeded.
+                    if planner_outcome == "entitas_tidak_ditemukan":
+                        refusal = ("Entitas yang diminta tidak ditemukan dalam data yang boleh diakses. "
+                                   "Saya tidak akan menyebut nominalnya Rp0 seolah entitas tersebut ada.")
+                    elif planner_outcome == "perlu_persempit_filter":
+                        refusal = ("Hasil analisis memiliki lebih dari 20 kelompok. "
+                                   "Persempit program atau periode agar perbandingan tidak mengabaikan data.")
+                    elif planner_attempted and not planner_succeeded and not evidence.database_results:
+                        refusal = ("Rencana analisis belum berhasil divalidasi. "
+                                   "Coba tentukan kriteria dan periode secara lebih spesifik. "
+                                   "Kode: " + last_plan_error + ". Tidak ada angka yang diverifikasi.")
                     if (refusal is not None and not document_retry_used
                             and evidence.document_queries == 0
                             and _DOCUMENT_REQUEST.search(query)
@@ -445,9 +582,25 @@ class DatabaseFunctionChat:
                     raise RuntimeError("Panggilan fungsi tidak memiliki status yang sah.")
                 if emitted_text:
                     # Mixed partial prose + function calls cannot be committed atomically.
+                    reason = "teks-parsial-dengan-function-call"
                     raise RuntimeError("Gemini mencampur jawaban parsial dengan panggilan fungsi.")
                 if round_number == MAX_MODEL_ROUNDS - 1 or total_tools + len(tool_calls) > MAX_TOOL_CALLS_PER_TURN:
-                    raise RuntimeError("Batas pemanggilan fungsi AI tercapai.")
+                    # A valid function_call is not a completed answer. Stop safely
+                    # without executing excess tools or promoting provisional prose.
+                    replacement = (
+                        "Batas langkah analisis SIBIMA-AI tercapai sebelum hasil selesai "
+                        "diverifikasi (kode: batas_tool_atau_putaran). "
+                        "Tidak ada angka baru yang dapat dipastikan dari permintaan ini. "
+                        "Coba bagi analisis menjadi beberapa pertanyaan lebih terfokus."
+                    )
+                    if emitted_text:
+                        yield MockEvent("text_reset", None)
+                    yield MockEvent("text_chunk", replacement)
+                    yield MockEvent("completed", {
+                        "kind": "markdown", "content": replacement,
+                        "data": {"steps": []},
+                    })
+                    return
                 staged.extend(steps)  # Preserve original thought + signatures + function_call.
                 request.extend(deepcopy(steps))
                 yield MockEvent("db_read_started", None)
@@ -464,8 +617,50 @@ class DatabaseFunctionChat:
                         reason = "identitas-function-call-tidak-lengkap"
                         raise RuntimeError("Identitas function call tidak lengkap.")
                     stage = "query-postgresql"
-                    result = self.controller.execute(name, arguments)
-                    evidence.record(name, result)
+                    if name in PLANNER_TOOLS:
+                        planner_attempted = True
+                    try:
+                        result = self.controller.execute(name, arguments)
+                    except ValueError as exc:
+                        if name not in PLANNER_TOOLS:
+                            raise
+                        result = _planner_feedback(exc)
+                        last_plan_error = result["kode"]
+                        reason = last_plan_error
+                        if planner_recoveries >= MAX_PLAN_RECOVERIES:
+                            # A second invalid plan is an *unsupported analysis*,
+                            # not a PostgreSQL outage. Do not bubble up a generic
+                            # ValueError or let the model invent a numeric answer.
+                            replacement = (
+                                "Rencana analisis masih belum valid setelah satu percobaan perbaikan. "
+                                "Kode: " + last_plan_error + ". "
+                                "Data untuk pertanyaan ini belum berhasil diverifikasi. "
+                                "Coba pecah pertanyaan menjadi satu agregasi per langkah "
+                                "atau tentukan filter dan periode secara lebih spesifik."
+                            )
+                            if emitted_text:
+                                yield MockEvent("text_reset", None)
+                            yield MockEvent("text_chunk", replacement)
+                            yield MockEvent("completed", {
+                                "kind": "markdown", "content": replacement,
+                                "data": {"steps": []},
+                            })
+                            return
+                        planner_recoveries += 1
+                        if result["kode"] in ("skema_tidak_cocok", "jalur_relasi", "filter_tidak_valid"):
+                            hint = _schema_hint_from_catalog(self.controller, arguments)
+                            if hint is not None:
+                                result["katalog_diizinkan"] = hint
+                        # This rejection is not a database success. The next model
+                        # round may correct it, but is NOT granted new permissions.
+                    else:
+                        if name in PLANNER_TOOLS and isinstance(result, dict):
+                            if result.get("status") == "ok":
+                                planner_succeeded = True
+                                planner_outcome = None
+                            elif result.get("status") in ("entitas_tidak_ditemukan", "perlu_persempit_filter"):
+                                planner_outcome = result["status"]
+                        evidence.record(name, result)
                     stage = "membuat-function-result"
                     function_result = {
                         "type": "function_result", "name": name, "call_id": call_id,
@@ -488,7 +683,10 @@ class DatabaseFunctionChat:
                                                                reason=reason, terminal_status=terminal_status,
                                                                step_types=step_types))
         except Exception as exc:
-            # Never display raw SQL, API responses, user data, or credentials.
+            # Show a safe, app-authored reason for common stream failures, not
+            # the raw exception message, function arguments, or database rows.
+            if reason == "tidak-ada":
+                reason = _runtime_code(exc)
             code = self.gemini._code(exc)
             detail = _safe_diagnostic(exc, stage=stage, event_type=last_event,
                                                                reason=reason, terminal_status=terminal_status,

@@ -68,7 +68,7 @@ DOMAINS = {
         "definisi": "Tanggal pembayaran = paid_at (boleh NULL). Hanya status lunas dihitung untuk nominal lunas; belum dikurangi refund atau biaya lain.",
     },
     "jadwal": {
-        "from": "FROM schedules s JOIN programs p ON p.id=s.program_id JOIN users u ON u.id=s.tutor_id",
+        "from": "FROM schedules s JOIN programs p ON p.id=s.program_id JOIN users u ON u.id=s.tutor_id JOIN rooms r ON r.id=s.room_id",
         "date": None,
         "status": None,
         "statuses": set(),
@@ -80,8 +80,12 @@ DOMAINS = {
         "dimensions": {
             "program": (("p.id", "program_id"), ("p.nama", "program")),
             "tutor": (("u.id", "tutor_user_id"), ("u.nama_lengkap", "tutor")),
+            "ruangan": (("r.id", "ruangan_id"), ("r.nama", "ruangan")),
+            "hari": (("s.hari::text", "hari"),),
         },
-        "definisi": "Jadwal aktif adalah jadwal berulang, bukan pertemuan yang telah diselesaikan. Tutor unik berdasarkan tutor_id.",
+        "definisi": "Jadwal aktif adalah jadwal berulang, bukan pertemuan yang telah diselesaikan. "
+                   "Kelompok ruangan/hari menunjukkan jadwal aktif, bukan okupansi ruangan aktual. "
+                   "Tutor unik berdasarkan tutor_id.",
     },
     "nilai": {
         "from": "FROM grades g JOIN enrollments e ON e.id=g.enrollment_id JOIN programs p ON p.id=e.program_id",
@@ -98,6 +102,61 @@ DOMAINS = {
             "bulan": (("date_trunc('month', g.tanggal)::date", "bulan"),),
         },
         "definisi": "Rata-rata aritmetika setiap baris nilai; bukan nilai akhir berbobot. Nilai dari enrollment lama juga termasuk.",
+    },
+    # 5G.3: class session events are facts (not recurring schedules).
+    "pertemuan": {
+        "from": "FROM class_sessions cs JOIN schedules s ON s.id=cs.schedule_id "
+                "JOIN programs p ON p.id=s.program_id "
+                "JOIN users u ON u.id=s.tutor_id JOIN rooms r ON r.id=s.room_id",
+        "date": "cs.tanggal",
+        "status": "cs.status::text",
+        "statuses": {"terlaksana", "batal", "perlu_laporan", "selesai"},
+        "metrics": {
+            "jumlah_pertemuan": "COUNT(*)::int",
+            "jumlah_pertemuan_selesai": "COUNT(*)::int",
+            "jumlah_pertemuan_batal": "COUNT(*)::int",
+        },
+        "fixed_status": {
+            "jumlah_pertemuan_selesai": "selesai",
+            "jumlah_pertemuan_batal": "batal",
+        },
+        "dimensions": {
+            "program": (("p.id", "program_id"), ("p.nama", "program")),
+            "status": (("cs.status::text", "status"),),
+            "bulan": (("date_trunc('month', cs.tanggal)::date", "bulan"),),
+            "tutor": (("u.id", "tutor_user_id"), ("u.nama_lengkap", "tutor")),
+            "ruangan": (("r.id", "ruangan_id"), ("r.nama", "ruangan")),
+        },
+        "definisi": ("Satu baris adalah pertemuan kelas nyata (class_sessions), bukan jadwal berulang. "
+                    "Status selesai dan batal dihitung tersendiri; perlu_laporan/terlaksana bukan selesai. "
+                    "Tutor hanya dapat melihat pertemuan pada jadwal miliknya, termasuk jadwal yang kini nonaktif."),
+    },
+    # 5G.3: refund rows link to one payment, invoice, enrollment and program.
+    "pengembalian": {
+        "from": "FROM payment_refunds pr JOIN payments py ON py.id=pr.payment_id "
+                "JOIN invoices i ON i.id=py.invoice_id "
+                "JOIN enrollments e ON e.id=i.enrollment_id "
+                "JOIN programs p ON p.id=e.program_id",
+        "date": "(pr.created_at AT TIME ZONE 'Asia/Jakarta')::date",
+        "status": "pr.status::text",
+        "statuses": {"berhasil", "gagal"},
+        "metrics": {
+            "jumlah_pengembalian": "COUNT(*)::int",
+            "jumlah_pengembalian_berhasil": "COUNT(*)::int",
+            "nominal_pengembalian_berhasil": "COALESCE(SUM(pr.jumlah), 0)::numeric(18,2)",
+        },
+        "fixed_status": {
+            "jumlah_pengembalian_berhasil": "berhasil",
+            "nominal_pengembalian_berhasil": "berhasil",
+        },
+        "dimensions": {
+            "program": (("p.id", "program_id"), ("p.nama", "program")),
+            "status": (("pr.status::text", "status"),),
+            "bulan": (("date_trunc('month', pr.created_at AT TIME ZONE 'Asia/Jakarta')::date", "bulan"),),
+        },
+        "definisi": ("Pengembalian berdasarkan payment_refunds. Nominal berhasil hanya status berhasil "
+                    "(tanggal dibuat, zona Asia/Jakarta); bukan saldo bersih, omzet, "
+                    "atau dana yang telah diterima langsung oleh siswa."),
     },
     "kehadiran": {
         "from": "FROM attendances a JOIN class_sessions cs ON cs.id=a.session_id JOIN schedules s ON s.id=cs.schedule_id JOIN programs p ON p.id=s.program_id",
@@ -121,21 +180,21 @@ DOMAINS = {
 SCHEMA = {
     "type": "function", "name": NAME,
     "description": (
-        "ADMIN SAJA: analitik database dinamis. Gabungkan metrik dan 0-2 dimensi tanpa SQL bebas. "
-        "Domain pendaftaran: jumlah_pendaftaran/siswa_unik; tagihan: jumlah_tagihan/nominal_tagihan/nominal_belum_lunas; "
-        "pembayaran: jumlah_pembayaran/nominal_pembayaran_lunas; jadwal: jumlah_jadwal_aktif/tutor_unik; "
-        "nilai: jumlah_nilai/rata_rata_nilai; kehadiran: jumlah_catatan_absensi/jumlah_hadir/persentase_hadir. "
-        "Dimensi: program, bulan, status, tutor, jenis SESUAI domain. Jangan menebak nilai atau meminta SQL. "
-        "tanggal_dari/sampai berdasar created_at pendaftaran, periode invoice, paid_at pembayaran, "
-        "tanggal nilai atau tanggal sesi; jadwal tidak mendukung tanggal. "
-        "Hasil total dihitung dari seluruh data dan rincian maksimal 20 grup. "
-        "Gunakan tool khusus lama untuk pertanyaan akun aktif global atau akses siswa/tutor."
+        "ADMIN: analitik dinamis terkontrol. Pilih satu domain/metrik, kelompok maksimal dua "
+        "dimensi, filter ISO/ENUM yang sah. Pilihan domain dan metrik: "
+        + "; ".join(f"{domain}: {', '.join(spec['metrics'])}" for domain, spec in DOMAINS.items())
+        + ". Dimensi hanya yang sesuai domain; lihat enum. Pengelompokan hingga 20 grup, "
+          "agregat_global dihitung dari SEMUA baris sesuai filter. "
+          "Pertemuan adalah class_sessions, BUKAN jadwal mingguan. "
+          "Nominal pengembalian berhasil hanya refund status berhasil, BUKAN pendapatan net. "
+          "Tidak menerima nama kolom, nama tabel, query, atau SQL bebas. "
+          "Filter tanggal mengikuti domain; jadwal tidak mempunyai tanggal pertemuan."
     ),
     "parameters": {
         "type": "object", "properties": {
             "domain": {"type": "string", "enum": list(DOMAINS)},
             "metrik": {"type": "string", "enum": sorted({m for d in DOMAINS.values() for m in d["metrics"]})},
-            "kelompok": {"type": "array", "items": {"type": "string", "enum": ["program", "bulan", "status", "tutor", "jenis"]}, "maxItems": 2},
+            "kelompok": {"type": "array", "items": {"type": "string", "enum": ["program", "bulan", "status", "tutor", "jenis", "ruangan", "hari"]}, "maxItems": 2},
             "filter": {"type": "object", "properties": {
                 "program_id": {"type": "integer"},
                 "status": {"type": "string"},
@@ -218,6 +277,7 @@ ROLE_DOMAIN_METRICS = {
         "pendaftaran": frozenset({"jumlah_pendaftaran", "siswa_unik"}),
         "jadwal": frozenset({"jumlah_jadwal_aktif"}),
         "kehadiran": frozenset({"jumlah_catatan_absensi", "jumlah_hadir", "persentase_hadir"}),
+        "pertemuan": frozenset({"jumlah_pertemuan", "jumlah_pertemuan_selesai", "jumlah_pertemuan_batal"}),
     },
     "siswa": {
         "pendaftaran": frozenset({"jumlah_pendaftaran"}),
@@ -225,13 +285,15 @@ ROLE_DOMAIN_METRICS = {
         "pembayaran": frozenset({"jumlah_pembayaran", "nominal_pembayaran_lunas"}),
         "nilai": frozenset({"jumlah_nilai", "rata_rata_nilai"}),
         "kehadiran": frozenset({"jumlah_catatan_absensi", "jumlah_hadir", "persentase_hadir"}),
+        "pengembalian": frozenset({"jumlah_pengembalian", "jumlah_pengembalian_berhasil", "nominal_pengembalian_berhasil"}),
     },
 }
 ROLE_DIMENSIONS = {
     "tutor": {
         "pendaftaran": frozenset({"program"}),
-        "jadwal": frozenset({"program"}),
+        "jadwal": frozenset({"program", "ruangan", "hari"}),
         "kehadiran": frozenset({"program", "bulan"}),
+        "pertemuan": frozenset({"program", "bulan", "status", "ruangan"}),
     },
     "siswa": {
         "pendaftaran": frozenset({"program", "status", "bulan"}),
@@ -239,6 +301,7 @@ ROLE_DIMENSIONS = {
         "pembayaran": frozenset({"program", "status", "bulan"}),
         "nilai": frozenset({"program", "jenis", "bulan"}),
         "kehadiran": frozenset({"program", "bulan"}),
+        "pengembalian": frozenset({"program", "status", "bulan"}),
     },
 }
 
@@ -273,12 +336,14 @@ def role_dynamic_schema(role: str) -> dict:
     allowed = ROLE_DOMAIN_METRICS[role]
     schema["description"] = (
         ("TUTOR SAJA: analisis jumlah siswa aktif pada program yang diampu, "
-         "jadwal aktif sendiri, dan catatan kehadiran pada sesi selesai milik jadwal sendiri. "
+         "jadwal aktif sendiri (termasuk hari/ruangan), pertemuan milik jadwal sendiri, "
+         "dan catatan kehadiran pada sesi selesai milik jadwal sendiri. "
          "Jumlah siswa adalah siswa dengan enrollment aktif dan akun aktif. "
          "Tidak boleh melihat tagihan, pembayaran, nilai, atau program Tutor lain. ")
         if role == "tutor" else
         ("SISWA SAJA: analisis pendaftaran, tagihan dan pembayaran MILIK SENDIRI; "
-         "nilai dan kehadiran sendiri hanya pada enrollment terakhir yang masih "
+         "riwayat pengembalian pembayaran sendiri; nilai dan kehadiran sendiri "
+         "hanya pada enrollment terakhir yang masih "
          "boleh diakses dan tidak terkunci oleh tunggakan. Tidak boleh melihat siswa lain. ")
     ) + "Pilih satu domain/metrik dan maksimal dua kelompok. SQL bebas dilarang. Perhitungan PostgreSQL read-only."
     props = schema["parameters"]["properties"]

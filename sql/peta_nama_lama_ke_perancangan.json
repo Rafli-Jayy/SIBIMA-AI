@@ -1,0 +1,680 @@
+{
+  "users": {
+    "new": "pengguna",
+    "columns": [
+      {
+        "old": "id",
+        "new": "id_pengguna"
+      },
+      {
+        "old": "username",
+        "new": "username"
+      },
+      {
+        "old": "email",
+        "new": "email"
+      },
+      {
+        "old": "nama_lengkap",
+        "new": "nama_lengkap"
+      },
+      {
+        "old": "password_hash",
+        "new": "password_hash"
+      },
+      {
+        "old": "role",
+        "new": "role"
+      },
+      {
+        "old": "status",
+        "new": "status"
+      },
+      {
+        "old": "email_verified",
+        "new": "email_verified"
+      },
+      {
+        "old": "failed_attempts",
+        "new": "failed_attempts"
+      },
+      {
+        "old": "locked_until",
+        "new": "locked_until"
+      },
+      {
+        "old": "must_change_password",
+        "new": "must_change_password"
+      },
+      {
+        "old": "approved_by",
+        "new": "id_pengguna_penyetuju"
+      },
+      {
+        "old": "approved_at",
+        "new": "approved_at"
+      },
+      {
+        "old": "reject_reason",
+        "new": "reject_reason"
+      },
+      {
+        "old": "last_login",
+        "new": "last_login"
+      },
+      {
+        "old": "created_at",
+        "new": "created_at"
+      }
+    ]
+  },
+  "students": {
+    "new": "siswa",
+    "columns": [
+      {
+        "old": "user_id",
+        "new": "id_pengguna"
+      },
+      {
+        "old": "role",
+        "new": "role"
+      },
+      {
+        "old": "nis",
+        "new": "nis"
+      },
+      {
+        "old": "jenjang",
+        "new": "jenjang"
+      },
+      {
+        "old": "sekolah",
+        "new": "sekolah"
+      },
+      {
+        "old": "no_hp",
+        "new": "no_hp"
+      },
+      {
+        "old": "nama_wali",
+        "new": "nama_wali"
+      }
+    ]
+  },
+  "tutors": {
+    "new": "tutor",
+    "columns": [
+      {
+        "old": "user_id",
+        "new": "id_pengguna"
+      },
+      {
+        "old": "role",
+        "new": "role"
+      },
+      {
+        "old": "kode_tutor",
+        "new": "kode_tutor"
+      },
+      {
+        "old": "keahlian",
+        "new": "keahlian"
+      },
+      {
+        "old": "no_hp",
+        "new": "no_hp"
+      }
+    ]
+  },
+  "otp_codes": {
+    "new": "kode_otp",
+    "columns": [
+      {
+        "old": "id",
+        "new": "id_otp"
+      },
+      {
+        "old": "user_id",
+        "new": "id_pengguna"
+      },
+      {
+        "old": "code_hash",
+        "new": "code_hash"
+      },
+      {
+        "old": "purpose",
+        "new": "purpose"
+      },
+      {
+        "old": "expires_at",
+        "new": "expires_at"
+      },
+      {
+        "old": "attempts",
+        "new": "attempts"
+      },
+      {
+        "old": "used_at",
+        "new": "used_at"
+      },
+      {
+        "old": "created_at",
+        "new": "created_at"
+      }
+    ]
+  },
+  "activity_logs": {
+    "new": "log_aktivitas",
+    "columns": [
+      {
+        "old": "id",
+        "new": "id_log"
+      },
+      {
+        "old": "user_id",
+        "new": "id_pengguna"
+      },
+      {
+        "old": "aksi",
+        "new": "aksi"
+      },
+      {
+        "old": "detail",
+        "new": "detail"
+      },
+      {
+        "old": "created_at",
+        "new": "created_at"
+      }
+    ]
+  },
+  "programs": {
+    "new": "program_bimbel",
+    "columns": [
+      {
+        "old": "id",
+        "new": "id_program"
+      },
+      {
+        "old": "kode",
+        "new": "kode"
+      },
+      {
+        "old": "nama",
+        "new": "nama"
+      },
+      {
+        "old": "jenjang",
+        "new": "jenjang"
+      },
+      {
+        "old": "deskripsi",
+        "new": "deskripsi"
+      },
+      {
+        "old": "harga_bulanan",
+        "new": "harga_bulanan"
+      },
+      {
+        "old": "kuota",
+        "new": "kuota"
+      },
+      {
+        "old": "status",
+        "new": "status"
+      },
+      {
+        "old": "bobot_tugas",
+        "new": "bobot_tugas"
+      },
+      {
+        "old": "bobot_kuis",
+        "new": "bobot_kuis"
+      },
+      {
+        "old": "bobot_uts",
+        "new": "bobot_uts"
+      },
+      {
+        "old": "bobot_uas",
+        "new": "bobot_uas"
+      },
+      {
+        "old": "created_at",
+        "new": "created_at"
+      }
+    ]
+  },
+  "rooms": {
+    "new": "ruangan",
+    "columns": [
+      {
+        "old": "id",
+        "new": "id_ruangan"
+      },
+      {
+        "old": "nama",
+        "new": "nama"
+      },
+      {
+        "old": "kapasitas",
+        "new": "kapasitas"
+      },
+      {
+        "old": "aktif",
+        "new": "aktif"
+      }
+    ]
+  },
+  "schedules": {
+    "new": "jadwal_kelas",
+    "columns": [
+      {
+        "old": "id",
+        "new": "id_jadwal"
+      },
+      {
+        "old": "program_id",
+        "new": "id_program"
+      },
+      {
+        "old": "tutor_id",
+        "new": "id_tutor"
+      },
+      {
+        "old": "room_id",
+        "new": "id_ruangan"
+      },
+      {
+        "old": "hari",
+        "new": "hari"
+      },
+      {
+        "old": "jam_mulai",
+        "new": "jam_mulai"
+      },
+      {
+        "old": "jam_selesai",
+        "new": "jam_selesai"
+      },
+      {
+        "old": "aktif",
+        "new": "aktif"
+      },
+      {
+        "old": "notif_monitor_from",
+        "new": "notif_monitor_from"
+      }
+    ]
+  },
+  "enrollments": {
+    "new": "pendaftaran",
+    "columns": [
+      {
+        "old": "id",
+        "new": "id_pendaftaran"
+      },
+      {
+        "old": "student_id",
+        "new": "id_siswa"
+      },
+      {
+        "old": "program_id",
+        "new": "id_program"
+      },
+      {
+        "old": "status",
+        "new": "status"
+      },
+      {
+        "old": "alasan_tolak",
+        "new": "alasan_tolak"
+      },
+      {
+        "old": "processed_by",
+        "new": "id_pengguna_pemroses"
+      },
+      {
+        "old": "processed_at",
+        "new": "processed_at"
+      },
+      {
+        "old": "created_at",
+        "new": "created_at"
+      }
+    ]
+  },
+  "class_sessions": {
+    "new": "pertemuan_kelas",
+    "columns": [
+      {
+        "old": "id",
+        "new": "id_pertemuan"
+      },
+      {
+        "old": "schedule_id",
+        "new": "id_jadwal"
+      },
+      {
+        "old": "tanggal",
+        "new": "tanggal"
+      },
+      {
+        "old": "pertemuan_ke",
+        "new": "pertemuan_ke"
+      },
+      {
+        "old": "topik",
+        "new": "topik"
+      },
+      {
+        "old": "ringkasan",
+        "new": "ringkasan"
+      },
+      {
+        "old": "status",
+        "new": "status"
+      },
+      {
+        "old": "created_at",
+        "new": "created_at"
+      },
+      {
+        "old": "alasan_batal",
+        "new": "alasan_batal"
+      },
+      {
+        "old": "selesai_at",
+        "new": "selesai_at"
+      }
+    ]
+  },
+  "attendances": {
+    "new": "kehadiran",
+    "columns": [
+      {
+        "old": "session_id",
+        "new": "id_pertemuan"
+      },
+      {
+        "old": "student_id",
+        "new": "id_siswa"
+      },
+      {
+        "old": "status",
+        "new": "status"
+      },
+      {
+        "old": "keterangan",
+        "new": "keterangan"
+      },
+      {
+        "old": "dicatat_at",
+        "new": "dicatat_at"
+      },
+      {
+        "old": "enrollment_id",
+        "new": "id_pendaftaran"
+      }
+    ]
+  },
+  "grades": {
+    "new": "nilai",
+    "columns": [
+      {
+        "old": "id",
+        "new": "id_nilai"
+      },
+      {
+        "old": "enrollment_id",
+        "new": "id_pendaftaran"
+      },
+      {
+        "old": "jenis",
+        "new": "jenis"
+      },
+      {
+        "old": "judul",
+        "new": "judul"
+      },
+      {
+        "old": "nilai",
+        "new": "nilai"
+      },
+      {
+        "old": "tanggal",
+        "new": "tanggal"
+      },
+      {
+        "old": "input_by",
+        "new": "id_tutor_penginput"
+      },
+      {
+        "old": "created_at",
+        "new": "created_at"
+      }
+    ]
+  },
+  "invoices": {
+    "new": "tagihan",
+    "columns": [
+      {
+        "old": "id",
+        "new": "id_tagihan"
+      },
+      {
+        "old": "no_invoice",
+        "new": "no_invoice"
+      },
+      {
+        "old": "enrollment_id",
+        "new": "id_pendaftaran"
+      },
+      {
+        "old": "periode",
+        "new": "periode"
+      },
+      {
+        "old": "jumlah",
+        "new": "jumlah"
+      },
+      {
+        "old": "jatuh_tempo",
+        "new": "jatuh_tempo"
+      },
+      {
+        "old": "status",
+        "new": "status"
+      },
+      {
+        "old": "created_at",
+        "new": "created_at"
+      }
+    ]
+  },
+  "payments": {
+    "new": "pembayaran",
+    "columns": [
+      {
+        "old": "id",
+        "new": "id_pembayaran"
+      },
+      {
+        "old": "invoice_id",
+        "new": "id_tagihan"
+      },
+      {
+        "old": "kode_bayar",
+        "new": "kode_bayar"
+      },
+      {
+        "old": "jumlah",
+        "new": "jumlah"
+      },
+      {
+        "old": "status",
+        "new": "status"
+      },
+      {
+        "old": "paid_at",
+        "new": "paid_at"
+      },
+      {
+        "old": "processed_by",
+        "new": "id_pengguna_pemroses"
+      },
+      {
+        "old": "processed_at",
+        "new": "processed_at"
+      },
+      {
+        "old": "alasan_tolak",
+        "new": "alasan_tolak"
+      },
+      {
+        "old": "created_at",
+        "new": "created_at"
+      }
+    ]
+  },
+  "payment_refunds": {
+    "new": "pengembalian_pembayaran",
+    "columns": [
+      {
+        "old": "id",
+        "new": "id_pengembalian"
+      },
+      {
+        "old": "payment_id",
+        "new": "id_pembayaran"
+      },
+      {
+        "old": "kode_refund",
+        "new": "kode_refund"
+      },
+      {
+        "old": "jumlah",
+        "new": "jumlah"
+      },
+      {
+        "old": "alasan",
+        "new": "alasan"
+      },
+      {
+        "old": "status",
+        "new": "status"
+      },
+      {
+        "old": "created_at",
+        "new": "created_at"
+      },
+      {
+        "old": "processed_at",
+        "new": "processed_at"
+      }
+    ]
+  },
+  "announcements": {
+    "new": "pengumuman",
+    "columns": [
+      {
+        "old": "id",
+        "new": "id_pengumuman"
+      },
+      {
+        "old": "judul",
+        "new": "judul"
+      },
+      {
+        "old": "isi",
+        "new": "isi"
+      },
+      {
+        "old": "dibuat_by",
+        "new": "id_pengguna_pembuat"
+      },
+      {
+        "old": "created_at",
+        "new": "created_at"
+      },
+      {
+        "old": "archived_at",
+        "new": "archived_at"
+      },
+      {
+        "old": "penerima_user_id",
+        "new": "id_pengguna_penerima"
+      },
+      {
+        "old": "sumber",
+        "new": "sumber"
+      },
+      {
+        "old": "kategori",
+        "new": "kategori"
+      },
+      {
+        "old": "event_key",
+        "new": "event_key"
+      },
+      {
+        "old": "expires_at",
+        "new": "expires_at"
+      },
+      {
+        "old": "program_id",
+        "new": "id_program"
+      },
+      {
+        "old": "batch_key",
+        "new": "batch_key"
+      },
+      {
+        "old": "actor_user_id",
+        "new": "id_pengguna_aktor"
+      },
+      {
+        "old": "related_type",
+        "new": "related_type"
+      },
+      {
+        "old": "related_id",
+        "new": "related_id"
+      }
+    ]
+  },
+  "announcement_targets": {
+    "new": "target_pengumuman",
+    "columns": [
+      {
+        "old": "announcement_id",
+        "new": "id_pengumuman"
+      },
+      {
+        "old": "target_role",
+        "new": "target_role"
+      }
+    ]
+  },
+  "announcement_reads": {
+    "new": "pembacaan_pengumuman",
+    "columns": [
+      {
+        "old": "announcement_id",
+        "new": "id_pengumuman"
+      },
+      {
+        "old": "user_id",
+        "new": "id_pengguna"
+      },
+      {
+        "old": "read_at",
+        "new": "read_at"
+      },
+      {
+        "old": "archived_at",
+        "new": "archived_at"
+      }
+    ]
+  }
+}

@@ -76,7 +76,12 @@ def test_tool_allowlist_including_enrollment_status():
         login(role)
         control = AIToolController(role, repo=FakeRepo())
         declared = {item["name"] for item in control.declarations()}
-        expected = set(allowed) | set(EXTRA_ROLE_TO_TOOLS[role]) | set(PATCH5C_ROLE_TO_TOOLS[role]) | (set(HISTORY_TOOLS) if role == "admin" else set()) | {ROLE_DYNAMIC_NAMES[role]}
+        expected = (set(allowed) | set(EXTRA_ROLE_TO_TOOLS[role]) |
+                    set(PATCH5C_ROLE_TO_TOOLS[role]) |
+                    (set(HISTORY_TOOLS) if role == "admin" else set()) |
+                    {ROLE_DYNAMIC_NAMES[role]})
+        if role != "siswa":  # Student must never receive internal schema tools.
+            expected.update({"describe_sibima_schema", "query_sibima_general", "query_sibima_multi"})
         if control.rag_tool is not None:
             expected.add("search_knowledge_base")
         assert declared == expected

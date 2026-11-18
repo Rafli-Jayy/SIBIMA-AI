@@ -30,8 +30,8 @@ def cleanup_session():
 
 
 @pytest.mark.parametrize("role, permitted", [
-    ("tutor", {"pendaftaran", "jadwal", "kehadiran"}),
-    ("siswa", {"pendaftaran", "tagihan", "pembayaran", "nilai", "kehadiran"}),
+    ("tutor", {"pendaftaran", "jadwal", "kehadiran", "pertemuan"}),
+    ("siswa", {"pendaftaran", "tagihan", "pembayaran", "nilai", "kehadiran", "pengembalian"}),
 ])
 def test_role_schemas_only_expose_permitted_domains(role, permitted):
     schema = role_dynamic_schema(role)

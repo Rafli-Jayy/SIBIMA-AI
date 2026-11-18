@@ -29,7 +29,9 @@ def compile_query(plan: dict, *, role: str = "admin", user_id: int | None = None
                     "EXISTS (SELECT 1 FROM schedules own_s WHERE own_s.program_id=e.program_id AND own_s.tutor_id=%s AND own_s.aktif=TRUE)",
                     "EXISTS (SELECT 1 FROM users own_u WHERE own_u.id=e.student_id AND own_u.role='siswa' AND own_u.status='aktif')",
                 ])
-            elif plan["domain"] == "jadwal":
+            elif plan["domain"] in {"jadwal", "pertemuan"}:
+                # Sessions remain visible to the owning Tutor even if a
+                # weekly schedule has since been deactivated.
                 conditions.append("s.tutor_id=%s")
             elif plan["domain"] == "kehadiran":
                 conditions.extend([
@@ -49,7 +51,8 @@ def compile_query(plan: dict, *, role: str = "admin", user_id: int | None = None
             elif plan["domain"] == "nilai":
                 conditions.extend(["e.student_id=%s", ENROLLMENT_TERAKHIR_TERSEDIA_SQL,
                                    f"NOT {AKSES_TERKUNCI_SQL}"])
-            elif plan["domain"] in {"pendaftaran", "tagihan", "pembayaran"}:
+            elif plan["domain"] in {"pendaftaran", "tagihan", "pembayaran", "pengembalian"}:
+                # Refund rows are joined payment -> invoice -> enrollment.
                 conditions.append("e.student_id=%s")
             else:
                 raise PermissionError("Domain tidak tersedia untuk Siswa.")

@@ -45,6 +45,14 @@ conninfo = make_conninfo(
 
 def konfigurasi_koneksi(conn) -> None:
     """Mengatur timezone untuk setiap koneksi baru dalam pool."""
+    # Check server-side too before handing a connection to any repository.
+    with conn.cursor() as guard:
+        guard.execute("SELECT current_database()")
+        if guard.fetchone()[0] != "sibima_db":
+            raise RuntimeError("Koneksi diblokir: bukan sibima_db.")
+        guard.execute("SELECT to_regclass('public.pengguna') IS NOT NULL AND to_regclass('public.users') IS NOT NULL")
+        if not guard.fetchone()[0]:
+            raise RuntimeError("Schema perancangan atau lapisan kompatibilitas belum terpasang di sibima_db.")
     conn.execute("SET TIME ZONE 'Asia/Jakarta'")
     conn.commit()
 

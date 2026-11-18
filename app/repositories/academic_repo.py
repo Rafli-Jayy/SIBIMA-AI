@@ -47,7 +47,7 @@ def daftar_program_tutor(tutor_id: int):
             JOIN programs p ON p.id = s.program_id
             LEFT JOIN enrollments e ON e.program_id = p.id
             WHERE s.tutor_id = %s
-            GROUP BY p.id
+            GROUP BY p.id, p.kode, p.nama, p.jenjang
             ORDER BY p.jenjang, p.nama;
             """,
             (tutor_id,),
@@ -493,14 +493,14 @@ def simpan_absensi(tutor_id: int, session_id: int, records: list[dict]) -> int:
                 )
             cur.execute(
                 """
-                INSERT INTO attendances
-                    (session_id, student_id, enrollment_id, status, keterangan, dicatat_at)
+                INSERT INTO kehadiran
+                    (id_pertemuan, id_siswa, id_pendaftaran, status, keterangan, dicatat_at)
                 VALUES (%s, %s, %s, %s::attendance_status, %s, now())
-                ON CONFLICT (session_id, student_id) DO UPDATE
+                ON CONFLICT (id_pertemuan, id_siswa) DO UPDATE
                 SET status = EXCLUDED.status, keterangan = EXCLUDED.keterangan,
                     dicatat_at = now()
-                WHERE attendances.enrollment_id = EXCLUDED.enrollment_id
-                RETURNING enrollment_id;
+                WHERE kehadiran.id_pendaftaran = EXCLUDED.id_pendaftaran
+                RETURNING id_pendaftaran AS enrollment_id;
                 """,
                 (session_id, student_id, enrollment_id, status, record.get("keterangan")),
             )

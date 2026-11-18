@@ -25,7 +25,7 @@ _DATABASE_REQUIREMENTS: tuple[tuple[re.Pattern[str], frozenset[str]], ...] = (
      frozenset({"get_my_enrollments", "student_dynamic_query"})),
     (re.compile(r"\b(?:tagihan|invoice)\s+(?:saya|ku)\b", re.I),
      frozenset({"get_my_invoices", "student_dynamic_query"})),
-    (re.compile(r"\b(?:pembayaran|riwayat\s+pembayaran)\s+(?:saya|ku)\b", re.I),
+    (re.compile(r"(?<!pengembalian )(?<!refund )\b(?:pembayaran|riwayat\s+pembayaran)\s+(?:saya|ku)\b", re.I),
      frozenset({"get_my_payments", "get_my_enrollments", "student_dynamic_query"})),
     (re.compile(r"\bnilai\s+(?:akademik\s+)?(?:saya|ku)\b", re.I),
      frozenset({"get_my_grades", "student_dynamic_query"})),
@@ -56,6 +56,18 @@ _HISTORY_DATABASE_REQUIREMENTS = (
      frozenset({"admin_user_timeline"})),
 )
 _DATABASE_REQUIREMENTS = _DATABASE_REQUIREMENTS + _HISTORY_DATABASE_REQUIREMENTS
+# Requirements which need a PARTICULAR dynamic domain, not merely any tool call.
+# Use this after the legacy requirements to avoid treating a payment result as
+# proof that a refund or class-session query was actually executed.
+_DYNAMIC_DOMAIN_REQUIREMENTS = (
+    (re.compile(r"\b(?:refund|pengembalian(?:\s+dana|\s+pembayaran)?)\b.{0,55}\b(?:saya|ku)\b|"
+                r"\b(?:saya|ku)\b.{0,55}\b(?:refund|pengembalian)\b", re.I),
+     "pengembalian", frozenset({"student_dynamic_query"})),
+    (re.compile(r"\b(?:berapa|jumlah|total|statistik|ringkasan|rekap|tren|analisis)\b.{0,60}"
+                r"\b(?:pertemuan|sesi\s+kelas)\b|"
+                r"\b(?:pertemuan|sesi\s+kelas)\b.{0,55}\b(?:saya|program)\b", re.I),
+     "pertemuan", frozenset({"admin_dynamic_query", "tutor_dynamic_query"})),
+)
 _DOCUMENT_REQUEST = re.compile(
     r"\b(?:chatscreen|chat_screen|streaming_renderer|response_renderer|"
     r"databasefunctionchat|ai_service|ai_db_chat|aitoolcontroller|"
@@ -102,8 +114,8 @@ _FIELDS_FOR_TOOL = {
     "admin_user_activity": ("aksi", "pelaku", "waktu"),
     "admin_user_timeline": ("jenis_peristiwa", "waktu", "program", "status_terkini"),
     "admin_history_analytics": ("kelompok", "jumlah"),
-    "admin_dynamic_query": ("program", "status", "bulan", "tutor", "jenis", "nilai"),
-    "tutor_dynamic_query": ("program", "bulan", "nilai"),
+    "admin_dynamic_query": ("program", "status", "bulan", "tutor", "jenis", "ruangan", "hari", "nilai"),
+    "tutor_dynamic_query": ("program", "status", "bulan", "ruangan", "hari", "nilai"),
     "student_dynamic_query": ("program", "status", "bulan", "jenis", "nilai"),
 }
 
@@ -141,11 +153,22 @@ class HybridEvidence:
     database_results: list[tuple[str, list[dict]]] = field(default_factory=list)
     # Scoped analytics are evidence only for the matching factual domain.
     scoped_dynamic_domains: set[tuple[str, str]] = field(default_factory=set)
+    # A schema description is NOT evidence of an executed query.
+    general_query_roots: set[str] = field(default_factory=set)
 
     def record(self, name: str, result: object) -> None:
         if name != RAG_TOOL:
             self.tools.add(name)
-            if name in {"tutor_dynamic_query", "student_dynamic_query"} and isinstance(result, dict):
+            if name == "query_sibima_multi" and isinstance(result, dict) and result.get("status") == "ok":
+                for part in result.get("analisis", []):
+                    if isinstance(part, dict) and isinstance(part.get("tabel_utama"), str):
+                        self.general_query_roots.add(part["tabel_utama"])
+            if name == "query_sibima_general" and isinstance(result, dict) and result.get("status") == "ok":
+                planned = result.get("rencana")
+                if isinstance(planned, dict) and isinstance(planned.get("tabel_utama"), str):
+                    self.general_query_roots.add(planned["tabel_utama"])
+            if name in {"admin_dynamic_query", "tutor_dynamic_query", "student_dynamic_query"} \
+                    and isinstance(result, dict) and isinstance(result.get("data"), list):
                 planned = result.get("rencana")
                 if isinstance(planned, dict) and isinstance(planned.get("domain"), str):
                     self.scoped_dynamic_domains.add((name, planned["domain"]))
@@ -183,6 +206,23 @@ class HybridEvidence:
         for pattern, allowed in _DATABASE_REQUIREMENTS:
             if not pattern.search(query):
                 continue
+            # General engine only counts as evidence if a matching source was
+            # actually queried. A metadata-only response cannot pass this check.
+            required_roots = set()
+            if "get_my_payments" in allowed:
+                required_roots.add("pembayaran")
+            if "get_my_invoices" in allowed:
+                required_roots.add("tagihan")
+            if "get_my_grades" in allowed:
+                required_roots.add("nilai")
+            if "get_my_enrollments" in allowed or "tutor_dynamic_query" in allowed:
+                required_roots.add("pendaftaran")
+            if "get_admin_overview" in allowed or "admin_enrollment_overview" in allowed:
+                required_roots.update({"pengguna", "pendaftaran"})
+            if "admin_user_activity" in allowed or "admin_system_history" in allowed:
+                required_roots.add("log_aktivitas")
+            if required_roots & self.general_query_roots:
+                continue
             # Legacy/administrator tools are checked exactly as before.
             if (allowed - scoped_names) & self.tools:
                 continue
@@ -198,6 +238,11 @@ class HybridEvidence:
                     for tool in (allowed & scoped_names)):
                 continue
             return True
+        domain_roots = {"pengembalian": "pengembalian_pembayaran", "pertemuan": "pertemuan_kelas"}
+        for pattern, domain, tools in _DYNAMIC_DOMAIN_REQUIREMENTS:
+            if pattern.search(query) and domain_roots.get(domain) not in self.general_query_roots and not any(
+                    (name, domain) in self.scoped_dynamic_domains for name in tools):
+                return True
         return False
 
     def _documents_sufficient(self, query: str) -> bool:

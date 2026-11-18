@@ -96,7 +96,7 @@ def test_all_domain_metrics_and_dimensions_come_from_catalog():
             for grouping in [[], *[[x] for x in spec["dimensions"]]]:
                 parsed = validate_dynamic_plan(plan(domain, metric, grouping), "admin")
                 compile_query(parsed)
-    assert len(DOMAINS) == 6
+    assert len(DOMAINS) == 8
 
 
 def test_parameters_never_joined_to_sql():

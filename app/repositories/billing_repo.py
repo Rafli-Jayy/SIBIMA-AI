@@ -26,11 +26,11 @@ def buat_invoice_awal(cur, enrollment_id: int, jumlah):
 
     cur.execute(
         """
-        INSERT INTO invoices (enrollment_id, periode, jumlah, jatuh_tempo, status)
+        INSERT INTO tagihan (id_pendaftaran, periode, jumlah, jatuh_tempo, status)
         VALUES (%s, date_trunc('month', CURRENT_DATE)::date, %s,
                 CURRENT_DATE + 7, 'belum_dibayar')
-        ON CONFLICT (enrollment_id, periode) DO NOTHING
-        RETURNING id, no_invoice, periode, jumlah, jatuh_tempo, status;
+        ON CONFLICT (id_pendaftaran, periode) DO NOTHING
+        RETURNING id_tagihan AS id, no_invoice, periode, jumlah, jatuh_tempo, status;
         """,
         (enrollment_id, jumlah),
     )
@@ -75,13 +75,13 @@ def buat_tagihan_bulanan(admin_id: int) -> list[dict]:
             cur.execute(
                 """
                 WITH inserted AS (
-                    INSERT INTO invoices (enrollment_id, periode, jumlah, jatuh_tempo, status)
+                    INSERT INTO tagihan (id_pendaftaran, periode, jumlah, jatuh_tempo, status)
                     SELECT e.id, date_trunc('month', CURRENT_DATE)::date,
                            p.harga_bulanan, CURRENT_DATE + 7, 'belum_dibayar'
                     FROM enrollments e JOIN programs p ON p.id = e.program_id
                     WHERE e.status = 'aktif' AND p.harga_bulanan > 0
-                    ON CONFLICT (enrollment_id, periode) DO NOTHING
-                    RETURNING id
+                    ON CONFLICT (id_pendaftaran, periode) DO NOTHING
+                    RETURNING id_tagihan AS id
                 )
                 SELECT i.id AS invoice_id, i.no_invoice, i.periode, i.jumlah,
                        i.jatuh_tempo, i.status, u.email AS email_siswa,

@@ -72,3 +72,11 @@ GEMINI_GOOGLE_SEARCH_ENABLED = os.getenv("GEMINI_GOOGLE_SEARCH_ENABLED", "false"
 
 # Folder keluaran
 BUKTI_DIR = BASE_DIR / "bukti"
+
+
+# Pelindung SIBIMA-AI hasil migrasi: koneksi ke database asli DILARANG.
+# Jangan pernah ubah untuk menunjuk ke bimbel_db.
+if DB_TARGET != 'local':
+    raise RuntimeError('Salinan SIBIMA-AI hanya boleh menggunakan DB_TARGET=local.')
+if DB_CONFIG.get('dbname') != 'sibima_db':
+    raise RuntimeError('Salinan SIBIMA-AI hanya boleh terhubung ke database sibima_db.')

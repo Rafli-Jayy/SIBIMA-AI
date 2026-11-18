@@ -403,10 +403,10 @@ def proses_keputusan_admin(
                     kode_refund = f"RF-{invoice['no_invoice']}"
                     cur.execute(
                         """
-                        INSERT INTO payment_refunds (payment_id, kode_refund, jumlah, alasan, status)
+                        INSERT INTO pengembalian_pembayaran (id_pembayaran, kode_refund, jumlah, alasan, status)
                         VALUES (%s, %s, %s, %s, 'berhasil')
-                        ON CONFLICT (payment_id) DO NOTHING
-                        RETURNING id, kode_refund, jumlah, status, created_at, processed_at;
+                        ON CONFLICT (id_pembayaran) DO NOTHING
+                        RETURNING id_pengembalian AS id, kode_refund, jumlah, status, created_at, processed_at;
                         """,
                         (invoice["payment_id"], kode_refund, invoice["payment_jumlah"], alasan),
                     )

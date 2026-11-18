@@ -49,7 +49,7 @@ def siswa_per_program() -> list[dict]:
                        ) AS kuota_tersisa
                 FROM programs AS p
                 LEFT JOIN enrollments AS e ON e.program_id = p.id
-                GROUP BY p.id
+                GROUP BY p.id, p.kode, p.nama, p.jenjang, p.status, p.kuota
                 ORDER BY p.jenjang, p.nama;
                 """
             )
@@ -121,7 +121,7 @@ def rata_nilai_per_program() -> list[dict]:
                 LEFT JOIN enrollments AS e
                   ON e.program_id = p.id AND e.status IN ('aktif', 'selesai')
                 LEFT JOIN v_nilai_akhir AS v ON v.enrollment_id = e.id
-                GROUP BY p.id
+                GROUP BY p.id, p.kode, p.nama, p.jenjang
                 ORDER BY p.jenjang, p.nama;
                 """
             )

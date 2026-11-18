@@ -7,6 +7,18 @@ def role_access_clarification(role: str | None, question: str) -> str | None:
     if not isinstance(question, str):
         return None
     q = question.casefold()
+    if role == "siswa":
+        internal_context = bool(re.search(
+            r"\b(?:sibima|database\s+(?:ini|sibima|sistem|yang)|basis\s+data\s+(?:ini|sibima|sistem)|di\s+database)\b", q))
+        internal_structure = bool(re.search(
+            r"\b(?:entitas|entity|tabel|kolom|atribut|skema|schema|struktur|erd|ddl|foreign\s+key|primary\s+key)\b", q))
+        listing = bool(re.search(
+            r"\b(?:daftar|sebutkan|tampilkan|lihat|nama|semua|seluruh|apa\s+saja|"
+            r"ada\s+apa|struktur|relasi|berapa\s+(?:banyak|jumlah)|jelaskan\s+struktur)\b", q))
+        if internal_context and internal_structure and listing:
+            return ("Akun Siswa tidak memiliki akses ke struktur atau daftar entitas database "
+                    "internal SIBIMA. Saya bisa membantu informasi akun dan kelas Anda sendiri, "
+                    "atau menjelaskan konsep database secara umum.")
     if role == "admin" and re.search(r"\bjadwal\s+mengajar\s+(?:saya|aku|gue|gw|ku)\b", q):
         return ("Anda login sebagai Admin. Jadwal mengajar pribadi merupakan informasi "
                 "akun Tutor, sehingga tidak ada jadwal mengajar pribadi untuk sesi Admin ini. "

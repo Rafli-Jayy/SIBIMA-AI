@@ -67,7 +67,7 @@ def daftar_pengumuman_admin(status: str = "aktif", limit: int = 100) -> list[dic
                 LEFT JOIN users AS u ON u.id = a.dibuat_by
                 LEFT JOIN announcement_targets AS at ON at.announcement_id = a.id
                 WHERE {kondisi_arsip} AND a.sumber = 'admin'
-                GROUP BY a.id, u.nama_lengkap, u.username
+                GROUP BY a.id, a.judul, a.isi, a.created_at, a.archived_at, a.dibuat_by, u.nama_lengkap, u.username
                 ORDER BY a.created_at DESC, a.id DESC
                 LIMIT %s;
                 """,
@@ -92,7 +92,7 @@ def detail_pengumuman_admin(announcement_id: int) -> dict | None:
                 LEFT JOIN users AS u ON u.id = a.dibuat_by
                 LEFT JOIN announcement_targets AS at ON at.announcement_id = a.id
                 WHERE a.id = %s AND a.sumber = 'admin'
-                GROUP BY a.id, u.nama_lengkap, u.username;
+                GROUP BY a.id, a.judul, a.isi, a.created_at, a.archived_at, a.dibuat_by, u.nama_lengkap, u.username;
                 """,
                 (announcement_id,),
             )
@@ -263,8 +263,8 @@ def detail_notifikasi_penerima(user_id: int, role: str, announcement_id: int,
         item=cur.fetchone()
         if item is None:return None
         if not arsip:
-            cur.execute("""INSERT INTO announcement_reads (announcement_id,user_id)
-              VALUES (%s,%s) ON CONFLICT (announcement_id,user_id) DO NOTHING;""",
+            cur.execute("""INSERT INTO pembacaan_pengumuman(id_pengumuman,id_pengguna)
+              VALUES (%s,%s) ON CONFLICT (id_pengumuman,id_pengguna) DO NOTHING;""",
               (announcement_id,user_id))
         conn.commit()
         return item
@@ -274,11 +274,11 @@ def tandai_semua_dibaca(user_id: int, role: str) -> int:
     _valid_pengguna(user_id, role)
     with pool.connection() as conn, conn.cursor() as cur:
         cur.execute(f'''
-          INSERT INTO announcement_reads (announcement_id,user_id)
+          INSERT INTO pembacaan_pengumuman(id_pengumuman,id_pengguna)
           SELECT a.id,%s FROM announcements a
           LEFT JOIN announcement_reads r ON r.announcement_id=a.id AND r.user_id=%s
           WHERE {_inbox_scope()} AND r.read_at IS NULL
-          ON CONFLICT (announcement_id,user_id) DO NOTHING;
+          ON CONFLICT (id_pengumuman,id_pengguna) DO NOTHING;
         ''', (user_id,user_id,user_id,role))
         n=cur.rowcount
         conn.commit()
@@ -292,16 +292,16 @@ def arsipkan_notifikasi_pribadi(user_id: int, role: str, announcement_id: int) -
     with pool.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
         # Guard pada INSERT-SELECT; tak boleh mengarsip pesan pengguna lain.
         cur.execute('''
-          INSERT INTO announcement_reads(announcement_id,user_id,archived_at)
+          INSERT INTO pembacaan_pengumuman(id_pengumuman,id_pengguna,archived_at)
           SELECT a.id,%s,now() FROM announcements a
           WHERE a.id=%s AND a.archived_at IS NULL
             AND (a.expires_at IS NULL OR a.expires_at>now())
             AND (a.penerima_user_id = %s OR (a.penerima_user_id IS NULL
               AND EXISTS (SELECT 1 FROM announcement_targets t
                WHERE t.announcement_id=a.id AND t.target_role = %s)))
-          ON CONFLICT (announcement_id,user_id)
+          ON CONFLICT (id_pengumuman,id_pengguna)
           DO UPDATE SET archived_at=now()
-          RETURNING announcement_id;
+          RETURNING id_pengumuman AS announcement_id;
         ''', (user_id,announcement_id,user_id,role))
         ok=cur.fetchone() is not None
         conn.commit()
@@ -363,14 +363,14 @@ def terbitkan_pengumuman_tutor(tutor_id: int, program_id: int, judul: str,
             raise ValueError('Waktu berakhir harus di masa depan.')
         batch='n2t-'+token_hex(16)
         cur.execute('''
-           INSERT INTO announcements
-             (judul,isi,dibuat_by,penerima_user_id,sumber,kategori,event_key,
-              batch_key,expires_at,actor_user_id,program_id,related_type,related_id)
+           INSERT INTO pengumuman
+             (judul,isi,id_pengguna_pembuat,id_pengguna_penerima,sumber,kategori,event_key,
+              batch_key,expires_at,id_pengguna_aktor,id_program,related_type,related_id)
            SELECT %s,%s,%s,e.student_id,'tutor','pengumuman',%s||':'||e.student_id,
                %s,%s,%s,%s,'program',%s
            FROM enrollments e JOIN users u ON u.id=e.student_id AND u.status::text='aktif'
            WHERE e.program_id=%s AND e.status::text='aktif'
-           ON CONFLICT DO NOTHING RETURNING id;
+           ON CONFLICT DO NOTHING RETURNING id_pengumuman AS id;
         ''',(judul,isi,tutor_id,batch,batch,expires_at,tutor_id,program_id,program_id,program_id))
         n=len(cur.fetchall())
         if n==0: raise ValueError('Tidak ada penerima saat penerbitan.')

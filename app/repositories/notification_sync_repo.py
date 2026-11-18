@@ -14,9 +14,9 @@ def sinkronisasi(user_id: int, role: str) -> None:
     with pool.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
         # Sinkronisasi notifikasi kelas hari ini; 1 event per akun/jadwal/tanggal.
         cur.execute('''
-            INSERT INTO announcements
-              (judul,isi,dibuat_by,penerima_user_id,sumber,kategori,event_key,
-               expires_at,program_id,related_type,related_id)
+            INSERT INTO pengumuman
+              (judul,isi,id_pengguna_pembuat,id_pengguna_penerima,sumber,kategori,event_key,
+               expires_at,id_program,related_type,related_id)
             SELECT 'Jadwal Kelas Hari Ini',
               'Hari ini ada '||p.nama||' pukul '||to_char(s.jam_mulai,'HH24:MI')||
               '-'||to_char(s.jam_selesai,'HH24:MI')||' WIB, ruang '||r.nama||
@@ -79,8 +79,8 @@ def sinkronisasi(user_id: int, role: str) -> None:
                                 (isi, active[schedule_id]))
                 else:
                     cur.execute('''
-                      INSERT INTO announcements
-                        (judul,isi,dibuat_by,penerima_user_id,sumber,kategori,event_key,related_type,related_id)
+                      INSERT INTO pengumuman
+                        (judul,isi,id_pengguna_pembuat,id_pengguna_penerima,sumber,kategori,event_key,related_type,related_id)
                       VALUES ('Pertemuan Belum Dilaporkan',%s,%s,%s,'sistem','pengingat',%s,
                               'schedule_pending',%s) ON CONFLICT DO NOTHING;
                     ''', (isi,user_id,user_id,f'n2:pending:{schedule_id}:'+datetime.now(ZoneInfo('Asia/Jakarta')).date().isoformat() ,schedule_id))

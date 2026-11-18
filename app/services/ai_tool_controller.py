@@ -12,6 +12,17 @@ from app.services.ai_query_planner import (
 from app.services.rag.rag_chat_tool import (RAGKnowledgeTool, TOOL_DECLARATION, TOOL_NAME)
 from app.services.ai_dynamic_plan import (NAME as DYNAMIC_NAME, ROLE_DYNAMIC_NAMES,
                                           role_dynamic_schema, validate_role_dynamic_plan)
+from app.services.ai_general_query import (GENERAL_QUERY_TOOL, GENERAL_SCHEMA_TOOL,
+                                           QUERY_DECL, SCHEMA_DECL)
+from app.services.ai_multi_query import MULTI_QUERY_TOOL, MULTI_DECL
+
+# Metadata (tabel, kolom, FK) and free-form analytics are not student features.
+# Siswa retain their explicitly scoped get_my_* and student_dynamic_query tools.
+GENERAL_TOOLS_BY_ROLE = {
+    "admin": frozenset({GENERAL_SCHEMA_TOOL, GENERAL_QUERY_TOOL, MULTI_QUERY_TOOL}),
+    "tutor": frozenset({GENERAL_SCHEMA_TOOL, GENERAL_QUERY_TOOL, MULTI_QUERY_TOOL}),
+    "siswa": frozenset(),
+}
 
 # Base role matrix retained unchanged; additional tools are explicitly separated.
 EXTRA_ROLE_TO_TOOLS = {
@@ -129,6 +140,8 @@ class AIToolController:
         tools = [tool_schema(n) for n in ROLE_TO_TOOLS[self.role] + EXTRA_ROLE_TO_TOOLS[self.role]
                  + PATCH5C_ROLE_TO_TOOLS[self.role] + (HISTORY_TOOLS if self.role == "admin" else ())]
         tools.append(tool_schema(ROLE_DYNAMIC_NAMES[self.role]))
+        tools.extend(dict(decl) for decl in (SCHEMA_DECL, QUERY_DECL, MULTI_DECL)
+                     if decl["name"] in GENERAL_TOOLS_BY_ROLE[self.role])
         if self.rag_tool is not None:
             tools.append(dict(TOOL_DECLARATION))
         return tools
@@ -140,6 +153,13 @@ class AIToolController:
             raise PermissionError("Sesi pengguna berubah atau sudah keluar.")
         if current.get("status") != "aktif":
             raise PermissionError("Akun tidak aktif.")
+        if name in (GENERAL_SCHEMA_TOOL, GENERAL_QUERY_TOOL, MULTI_QUERY_TOOL):
+            if name not in GENERAL_TOOLS_BY_ROLE[self.role]:
+                raise PermissionError("Fungsi metadata/analisis internal tidak diizinkan untuk role ini.")
+            # Still pass through repository's DB-role verification each call.
+            if not isinstance(arguments, dict):
+                raise ValueError("Rencana umum harus objek JSON.")
+            return self.repo.execute(self.user_id, self.role, name, arguments)
         if name == TOOL_NAME:
             if self.rag_tool is None:
                 raise PermissionError("Fungsi RAG tidak diaktifkan.")
