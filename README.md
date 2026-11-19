@@ -1,5 +1,3 @@
-<div align="center">
-
 # SIBIMA-AI
 
 **Sistem Informasi Bimbingan Belajar berbasis AI**
@@ -11,9 +9,7 @@ Aplikasi manajemen bimbingan belajar berbasis terminal dengan integrasi PostgreS
 ![Gemini](https://img.shields.io/badge/Google_Gemini-5865F2?style=for-the-badge&logo=googlegemini&logoColor=white)
 ![CLI](https://img.shields.io/badge/Interactive_CLI-24292F?style=for-the-badge&logo=gnometerminal&logoColor=white)
 
-[Overview](#overview) · [Fitur](#fitur-utama) · [Arsitektur](#arsitektur-sistem) · [Instalasi](#instalasi) · [SIBIMA-AI](#asisten-ai) · [Database](#database)
-
-</div>
+[Overview](#overview) · [Fitur](#fitur-utama) · [Arsitektur](#arsitektur-sistem) · [Instalasi](#instalasi) · [SIBIMA-AI](#asisten-ai) · [Database](#database) · [Tim Pengembang](#tim-pengembang)
 
 ---
 
@@ -28,6 +24,15 @@ Sistem memiliki tiga peran utama: **Admin**, **Tutor**, dan **Siswa**. Setiap pe
 | Database | Antarmuka | Asisten AI | Pengguna |
 | :---: | :---: | :---: | :---: |
 | 18 entitas | Rich + Questionary | Gemini + RAG | 3 role |
+
+## Tim Pengembang
+
+| No. | Nama | NIM |
+| ---: | --- | --- |
+| 1 | Ahmad Rafli Wijaya | 262410102025 |
+| 2 | Ilzam Saifillah Yulianto | 262410102008 |
+| 3 | Tegar Hafidz Firdausy | 262410102013 |
+| 4 | Try Andra Wicaksono | 262410102011 |
 
 ## Fitur Utama
 
@@ -91,20 +96,13 @@ Akses metadata database dan query generik dibatasi untuk Admin dan Tutor sesuai 
 
 ## Alur Sistem
 
-```mermaid
-flowchart TD
-    A[Registrasi akun] --> B[Verifikasi OTP]
-    B --> C[Persetujuan Admin]
-    C --> D[Login Siswa]
-    D --> E[Pilih program bimbel]
-    E --> F[Tagihan diterbitkan]
-    F --> G[Simulasi pembayaran]
-    G --> H{Konfirmasi Admin}
-    H -->|Disetujui| I[Pendaftaran aktif]
-    H -->|Ditolak| J[Penanganan penolakan sesuai status transaksi]
-    I --> K[Jadwal dan pertemuan kelas]
-    K --> L[Absensi dan nilai]
-    L --> M[Laporan akademik]
+```text
+Registrasi akun → Verifikasi OTP → Persetujuan Admin
+    → Login Siswa → Pilih program → Tagihan
+    → Simulasi pembayaran → Konfirmasi Admin
+        ├── Disetujui → Pendaftaran aktif
+        │   → Jadwal dan pertemuan → Absensi dan nilai → Laporan
+        └── Ditolak → Penanganan sesuai status transaksi
 ```
 
 Akun yang sudah aktif dapat mengakses fitur akun dan pembayaran. Akses kegiatan kelas mengikuti status pendaftaran dan ketentuan pembayaran. Tagihan bulanan, absensi per pertemuan, dan penilaian menjadi bagian dari operasional berkelanjutan.
@@ -113,16 +111,14 @@ Akun yang sudah aktif dapat mengakses fitur akun dan pembayaran. Akses kegiatan 
 
 SIBIMA menggunakan struktur berlapis untuk memisahkan antarmuka, aturan bisnis, dan akses data.
 
-```mermaid
-flowchart LR
-    A[CLI - Rich & Questionary] --> B[Service Layer]
-    B --> C[Repository Layer]
-    C --> D[(PostgreSQL)]
-    B --> E[Asisten SIBIMA-AI]
-    E --> F[Gemini API]
-    E --> G[Tool controller dan aturan akses]
-    G --> C
-    E --> H[Dokumen RAG dan indeks lokal]
+```text
+CLI (Rich + Questionary)
+    └── Service Layer
+        ├── Repository Layer → PostgreSQL
+        └── SIBIMA-AI
+            ├── Gemini API
+            ├── Tool controller dan aturan akses → Repository Layer
+            └── Dokumen RAG dan indeks lokal
 ```
 
 | Lapisan | Tanggung jawab |
@@ -304,12 +300,9 @@ Skenario pengujian utama meliputi autentikasi, akses per role, pendaftaran, tran
 
 ---
 
-<div align="center">
-
 **SIBIMA-AI**
 
 *Sistem informasi bimbingan belajar yang mengintegrasikan administrasi, akademik, dan kecerdasan buatan.*
 
 Dikembangkan sebagai proyek pembelajaran di bidang Teknologi Informasi.
 
-</div>
