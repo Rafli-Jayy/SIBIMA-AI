@@ -1,485 +1,315 @@
-# SIBIMA — Sistem Informasi Bimbingan Belajar
+<div align="center">
 
-SIBIMA adalah aplikasi **CLI berbasis Python dan PostgreSQL** untuk membantu operasional bimbingan belajar. Aplikasi menyediakan akses terpisah untuk Admin, Tutor, dan Siswa. Navigasi interaktif menggunakan `questionary`, sedangkan panel dan tabel terminal menggunakan `rich`.
+# SIBIMA-AI
 
-> **Catatan keamanan:** jangan menaruh password database, password email, API key, atau kredensial lain di README maupun repository. Simpan nilai rahasia hanya di file `.env` lokal dan jangan commit file tersebut.
+**Sistem Informasi Bimbingan Belajar berbasis AI**
 
-## Daftar isi
+Aplikasi manajemen bimbingan belajar berbasis terminal dengan integrasi PostgreSQL dan Google Gemini.
 
-1. [Fitur yang tersedia](#1-fitur-yang-tersedia)
-2. [Teknologi dan dependensi](#2-teknologi-dan-dependensi)
-3. [Struktur proyek](#3-struktur-proyek)
-4. [Persiapan instalasi baru](#4-persiapan-instalasi-baru)
-5. [Konfigurasi .env](#5-konfigurasi-env)
-6. [Menjalankan aplikasi](#6-menjalankan-aplikasi)
-7. [Alur akun dan OTP](#7-alur-akun-dan-otp)
-8. [Alur pendaftaran dan pembayaran](#8-alur-pendaftaran-dan-pembayaran)
-9. [Pengumuman dan notifikasi](#9-pengumuman-dan-notifikasi)
-10. [Database dan migrasi](#10-database-dan-migrasi)
-11. [Pengujian](#11-pengujian)
-12. [Pemecahan masalah](#12-pemecahan-masalah)
-13. [Batasan implementasi saat ini](#13-batasan-implementasi-saat-ini)
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
+![Gemini](https://img.shields.io/badge/Google_Gemini-5865F2?style=for-the-badge&logo=googlegemini&logoColor=white)
+![CLI](https://img.shields.io/badge/Interactive_CLI-24292F?style=for-the-badge&logo=gnometerminal&logoColor=white)
+
+[Overview](#overview) · [Fitur](#fitur-utama) · [Arsitektur](#arsitektur-sistem) · [Instalasi](#instalasi) · [SIBIMA-AI](#asisten-ai) · [Database](#database)
+
+</div>
 
 ---
 
-## 1. Fitur yang tersedia
+## Overview
+
+**SIBIMA (Sistem Informasi Bimbingan Belajar)** merupakan aplikasi untuk mengelola kegiatan administrasi dan akademik lembaga bimbingan belajar dalam satu sistem terintegrasi. Aplikasi dibangun menggunakan Python dengan antarmuka Command Line Interface (CLI) interaktif serta PostgreSQL sebagai basis data relasional.
+
+SIBIMA-AI mengintegrasikan Google Gemini sebagai asisten AI yang dapat membantu pengguna memperoleh informasi, memahami materi, dan menganalisis data bimbingan belajar sesuai hak akses masing-masing.
+
+Sistem memiliki tiga peran utama: **Admin**, **Tutor**, dan **Siswa**. Setiap peran memiliki dashboard, menu, dan kewenangan yang berbeda.
+
+| Database | Antarmuka | Asisten AI | Pengguna |
+| :---: | :---: | :---: | :---: |
+| 18 entitas | Rich + Questionary | Gemini + RAG | 3 role |
+
+## Fitur Utama
 
 ### Admin
-- Pusat Konfirmasi untuk pendaftaran akun Siswa/Tutor dan pendaftaran program.
-- Manajemen akun: melihat akun, mengaktifkan/menonaktifkan, membuka kunci, dan reset password.
-- Data Siswa: daftar, pencarian, filter, detail, ubah data, dan nonaktifkan akun.
-- Data Tutor: daftar, detail dan jadwal mengajar, ubah data, dan nonaktifkan akun.
-- Program dan Ruang: mengelola program, harga, kuota, bobot nilai, serta ruang belajar.
-- Pendaftaran: melihat pendaftaran, memindahkan siswa ke program lain, dan membatalkan pendaftaran.
-- Jadwal: melihat, menambah, mengubah, dan menonaktifkan jadwal. Bentrok tutor/ruang dicegah oleh constraint database.
-- Pembayaran: membuat tagihan bulanan, melihat tagihan/tunggakan/riwayat, serta membuat atau mengirim bukti PDF.
-- Laporan: pemasukan bulanan, siswa per program, rekap kehadiran, rata-rata nilai, ekspor CSV, dan ekspor Excel.
-- Komunikasi: membuat pengumuman, melihat pengumuman aktif, dan mengarsipkan pengumuman.
-- Log Aktivitas: melihat aktivitas terbaru dan memfilter berdasarkan pengguna/aksi.
+
+- Mengelola akun, verifikasi, dan persetujuan Siswa serta Tutor.
+- Mengelola program bimbel, kuota, biaya bulanan, ruangan, dan jadwal kelas.
+- Mengelola pendaftaran, konfirmasi pembayaran, tagihan, dan pengembalian pembayaran.
+- Memantau kehadiran, nilai, dan aktivitas akademik.
+- Membuat serta mengarsipkan pengumuman.
+- Melihat laporan pemasukan, jumlah siswa, kehadiran, dan nilai; mengekspor CSV atau Excel.
+- Mengakses analisis data melalui SIBIMA-AI sesuai kebijakan akses Admin.
 
 ### Tutor
-- Melihat jadwal mengajar hari ini atau mingguan.
-- Melihat kelas yang diampu dan daftar siswa pada kelas tersebut.
-- Membuka pertemuan, mengisi/mengubah absensi, dan melihat rekap absensi.
-- Menginput/mengubah nilai tugas, kuis (nilai manual), UTS, dan UAS.
-- Menulis/mengubah topik dan ringkasan materi pertemuan.
-- Melihat dan mengubah profil serta mengganti password.
-- Membaca pengumuman melalui menu Notifikasi.
+
+- Melihat jadwal mengajar dan daftar siswa pada program yang diampu.
+- Mengelola pertemuan kelas, topik, dan ringkasan materi.
+- Mencatat serta memperbarui kehadiran siswa.
+- Menginput nilai tugas, kuis, UTS, dan UAS.
+- Melihat rekap akademik kelas serta mengelola pengumuman kelas.
+- Menggunakan SIBIMA-AI untuk membantu analisis kegiatan mengajar sesuai kewenangan Tutor.
 
 ### Siswa
-- Melihat katalog program dan mendaftar program.
-- Melihat kelas/pendaftaran yang dimiliki.
-- Melihat jadwal, absensi, nilai, dan rapor TXT.
-- Melihat tagihan, menjalankan checkout simulasi, melihat riwayat pembayaran, dan mengunduh/mengirim bukti pembayaran.
-- Membaca catatan materi pertemuan.
-- Melihat menu informasi Tanya AI (fitur belum diaktifkan pada implementasi ini).
-- Melihat dan mengubah profil serta mengganti password.
-- Membaca pengumuman melalui menu Notifikasi.
 
-### Pembayaran simulasi
-SIBIMA **tidak terhubung ke bank atau payment gateway dan tidak memindahkan uang sungguhan**. Tombol `Bayar Sekarang` menjalankan simulasi internal. Persentase keberhasilan simulasi diatur melalui `PAYMENT_SIMULATION_SUCCESS_RATE`.
+- Registrasi akun, verifikasi OTP, dan pengelolaan profil.
+- Melihat katalog program dan melakukan pendaftaran kelas.
+- Melihat tagihan, melakukan simulasi pembayaran, dan memperoleh bukti pembayaran.
+- Mengakses jadwal, materi pertemuan, absensi, nilai, dan rapor pribadi.
+- Menerima pengumuman dan notifikasi.
+- Menggunakan SIBIMA-AI untuk bantuan belajar dan informasi akademik pribadi.
 
----
+> Pembayaran dan pengembalian pembayaran dalam proyek ini merupakan simulasi internal, bukan integrasi bank atau payment gateway. Tidak ada perpindahan uang sungguhan.
 
-## 2. Teknologi dan dependensi
+## Asisten AI
+
+SIBIMA-AI menggabungkan beberapa mekanisme untuk membantu pengguna:
+
+| Komponen | Fungsi |
+| --- | --- |
+| Gemini API | Percakapan berbasis bahasa alami dengan respons streaming |
+| Function calling | Mengakses fungsi aplikasi yang telah diizinkan |
+| Schema-aware query engine | Membaca metadata dan menyusun analisis data terstruktur sesuai izin |
+| Multi-stage query | Menggabungkan hasil beberapa agregasi untuk analisis yang lebih kompleks |
+| RAG (Retrieval-Augmented Generation) | Mengambil referensi dari dokumen pengetahuan yang relevan |
+| Role-based access | Membatasi tool dan cakupan data berdasarkan role pengguna |
+
+Contoh pertanyaan yang dapat digunakan dalam demonstrasi:
+
+| Role | Contoh pertanyaan |
+| --- | --- |
+| Admin | Berapa jumlah siswa aktif pada setiap program? |
+| Admin | Bagaimana ringkasan pembayaran dan tagihan periode ini? |
+| Tutor | Bagaimana rekap kehadiran siswa pada kelas yang saya ampu? |
+| Tutor | Siapa yang membutuhkan perhatian akademik berdasarkan nilai di kelas saya? |
+| Siswa | Bagaimana perkembangan nilai saya? |
+| Siswa | Apa jadwal kelas dan tagihan saya? |
+
+Akses metadata database dan query generik dibatasi untuk Admin dan Tutor sesuai kewenangannya. Siswa menggunakan tool informasi pribadi dan tidak diberi akses ke tool metadata skema atau query generik. AI tidak dimaksudkan untuk menjalankan perubahan data melalui percakapan.
+
+> Respons AI dapat dipengaruhi kualitas data, ketersediaan API, dan validitas rencana query. Pertanyaan kompleks tidak selalu dapat dijawab; hasil penting tetap perlu diverifikasi melalui aplikasi atau laporan resmi.
+
+## Alur Sistem
+
+```mermaid
+flowchart TD
+    A[Registrasi akun] --> B[Verifikasi OTP]
+    B --> C[Persetujuan Admin]
+    C --> D[Login Siswa]
+    D --> E[Pilih program bimbel]
+    E --> F[Tagihan diterbitkan]
+    F --> G[Simulasi pembayaran]
+    G --> H{Konfirmasi Admin}
+    H -->|Disetujui| I[Pendaftaran aktif]
+    H -->|Ditolak| J[Penanganan penolakan sesuai status transaksi]
+    I --> K[Jadwal dan pertemuan kelas]
+    K --> L[Absensi dan nilai]
+    L --> M[Laporan akademik]
+```
+
+Akun yang sudah aktif dapat mengakses fitur akun dan pembayaran. Akses kegiatan kelas mengikuti status pendaftaran dan ketentuan pembayaran. Tagihan bulanan, absensi per pertemuan, dan penilaian menjadi bagian dari operasional berkelanjutan.
+
+## Arsitektur Sistem
+
+SIBIMA menggunakan struktur berlapis untuk memisahkan antarmuka, aturan bisnis, dan akses data.
+
+```mermaid
+flowchart LR
+    A[CLI - Rich & Questionary] --> B[Service Layer]
+    B --> C[Repository Layer]
+    C --> D[(PostgreSQL)]
+    B --> E[Asisten SIBIMA-AI]
+    E --> F[Gemini API]
+    E --> G[Tool controller dan aturan akses]
+    G --> C
+    E --> H[Dokumen RAG dan indeks lokal]
+```
+
+| Lapisan | Tanggung jawab |
+| --- | --- |
+| UI | Tampilan terminal dan interaksi pengguna |
+| Service | Aturan bisnis, autentikasi, validasi, dan otorisasi |
+| Repository | Query PostgreSQL dan pengelolaan data |
+| Database | Integritas data, foreign key, constraint, fungsi, trigger, dan view |
+| AI | Integrasi Gemini, tool controller, query engine, dan retrieval dokumen |
+
+## Tech Stack
 
 | Teknologi | Kegunaan |
-|---|---|
-| Python | Aplikasi CLI |
-| PostgreSQL | Penyimpanan data |
-| `psycopg` dan `psycopg_pool` | Koneksi dan connection pool PostgreSQL |
-| `python-dotenv` | Membaca konfigurasi `.env` |
-| `bcrypt` | Hash password |
-| `questionary` | Menu interaktif terminal |
-| `rich` | Panel, tabel, dan tampilan terminal |
-| `email-validator` | Validasi alamat email |
-| `reportlab` | Pembuatan PDF |
-| `openpyxl` | Ekspor Excel |
-| `google-genai` | Dependensi Gemini yang tercantum; fitur Tanya AI belum diaktifkan |
-| `pytest` | Pengujian otomatis |
+| --- | --- |
+| Python | Bahasa pemrograman utama |
+| PostgreSQL | Database relasional |
+| Psycopg 3 | Driver PostgreSQL dan connection pool |
+| Rich | Panel, tabel, dan komponen visual terminal |
+| Questionary | Navigasi serta input interaktif |
+| Google Gen AI SDK | Integrasi Gemini API |
+| ChromaDB | Penyimpanan indeks vektor RAG |
+| PyMuPDF | Pemrosesan dokumen PDF untuk RAG |
+| bcrypt | Hash dan verifikasi password |
+| python-dotenv | Konfigurasi environment |
+| SMTP | Pengiriman OTP dan email ketika dikonfigurasi |
+| ReportLab | Pembuatan dokumen PDF |
+| OpenPyXL | Ekspor laporan Excel |
+| pytest | Pengujian otomatis |
 
-Daftar paket dan versinya dikelola melalui `requirements.txt`.
+## Database
 
----
+Nama database versi ini: **`sibima_db`**.
 
-## 3. Struktur proyek
+Skema PostgreSQL menggunakan nama entitas dan atribut sesuai perancangan. Struktur dasar terdiri dari 18 tabel fisik, 147 atribut, 28 constraint foreign key, dan 11 definisi tipe ENUM.
 
-Struktur utama pada arsip proyek:
+| Kelompok | Entitas fisik |
+| --- | --- |
+| Pengguna dan keamanan | `pengguna`, `siswa`, `tutor`, `kode_otp`, `log_aktivitas` |
+| Program dan akademik | `program_bimbel`, `ruangan`, `jadwal_kelas`, `pertemuan_kelas`, `kehadiran`, `nilai`, `pendaftaran` |
+| Keuangan | `tagihan`, `pembayaran`, `pengembalian_pembayaran` |
+| Komunikasi | `pengumuman`, `target_pengumuman`, `pembacaan_pengumuman` |
+
+Integritas data dijaga dengan identity, primary key, foreign key, unique constraint, check constraint, serta validasi jadwal dan pembayaran. Skema juga menyediakan view laporan dan trigger pendukung proses bisnis.
+
+Versi migrasi mempertahankan view kompatibilitas dengan nama tabel lama agar modul Python yang belum dikonversi sepenuhnya tetap dapat mengakses tabel fisik berbahasa Indonesia. View tersebut bukan entitas fisik tambahan.
+
+## Struktur Proyek
 
 ```text
-SIBIMA/
+SIBIMA-AI/
 ├── app/
-│   ├── repositories/       # Query dan akses data PostgreSQL
-│   ├── services/           # Aturan bisnis dan pemeriksaan hak akses
-│   ├── ui/                 # Menu CLI Admin, Tutor, Siswa, dan autentikasi
-│   ├── utils/              # Validasi, keamanan, format, dan exception
-│   ├── config.py           # Membaca konfigurasi .env
-│   ├── db.py               # Connection pool PostgreSQL
-│   ├── main.py             # Titik masuk aplikasi
-│   └── session.py          # Sesi pengguna aktif
+│   ├── repositories/       # Query dan akses database
+│   ├── services/           # Aturan bisnis dan integrasi AI
+│   ├── ui/                 # Antarmuka CLI
+│   ├── utils/              # Utilitas dan validasi
+│   ├── config.py           # Konfigurasi aplikasi
+│   ├── db.py               # Koneksi database
+│   ├── main.py             # Entry point
+│   └── session.py          # Sesi pengguna
+├── knowledge/
+│   ├── sources/            # Dokumen sumber RAG
+│   └── verified/           # Dokumen pengetahuan terverifikasi
 ├── sql/
-│   ├── schema.sql          # Skema database terkini untuk instalasi baru
-│   ├── seed.sql            # Data contoh program dan ruang
-│   ├── migrations/         # Migrasi untuk database versi sebelumnya
-│   └── permissions/        # Skrip hak akses database
+│   ├── 00_buat_database.sql
+│   ├── schema.sql
+│   ├── 02_kompatibilitas_dan_operasional.sql
+│   ├── 03_seed_demo.sql
+│   └── 04_validasi.sql
 ├── tests/                  # Pengujian otomatis
-├── bukti/                  # Keluaran bukti/dokumen lokal
-├── buat_admin.py           # Membuat akun admin pertama
-├── buat_struktur.py        # Utilitas struktur proyek
-├── .env.example            # Template konfigurasi
+├── buat_admin.py           # Inisialisasi Admin pertama
+├── .env.example            # Template environment
 ├── .gitignore
-├── MENU_CLI.md             # Referensi menu CLI
-├── README.md
-└── requirements.txt
+├── requirements.txt
+└── README.md
 ```
 
-Alur arsitektur aplikasi:
+## Instalasi
 
-```text
-UI (app/ui)
-    ↓
-Services (app/services)
-    ↓
-Repositories (app/repositories)
-    ↓
-PostgreSQL (app/db.py)
-```
+### 1. Prasyarat
 
-UI menangani interaksi pengguna. Aturan bisnis dan pemeriksaan hak akses ditempatkan di service. Repository menangani query database.
+- Python dan pip yang kompatibel dengan `requirements.txt`.
+- PostgreSQL lokal dengan dukungan extension `btree_gist`.
+- pgAdmin 4 atau PostgreSQL command-line tools (`psql`).
+- Google Gemini API key untuk fitur AI; SMTP apabila menggunakan OTP/email sungguhan.
 
----
+Buka terminal pada root proyek SIBIMA-AI.
 
-## 4. Persiapan instalasi baru
+### 2. Virtual environment dan dependensi
 
-### Prasyarat
-- Python yang mendukung sintaks proyek dan pip.
-- PostgreSQL aktif.
-- Terminal PowerShell (Windows) atau terminal shell (Linux/macOS).
-
-### Langkah 1 — Buka folder proyek
-
-Buka PowerShell di folder root SIBIMA, yaitu folder yang berisi `app`, `sql`, dan `requirements.txt`.
-
-### Langkah 2 — Buat virtual environment
+Windows PowerShell:
 
 ```powershell
 python -m venv .venv
-```
-
-Aktifkan di Windows PowerShell:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-Jika PowerShell menolak menjalankan skrip aktivasi, gunakan Command Prompt:
-
-```bat
-.venv\Scripts\activate.bat
-```
-
-### Langkah 3 — Pasang dependensi
-
-```powershell
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-### Langkah 4 — Siapkan PostgreSQL
-
-Buat database dan role PostgreSQL sesuai konfigurasi yang akan digunakan. Contoh berikut menggunakan nama `bimbel_db` dan `bimbel_user`; sesuaikan password dan hak akses dengan lingkungan sendiri.
-
-```sql
-CREATE ROLE bimbel_user WITH LOGIN PASSWORD 'GANTI_DENGAN_PASSWORD_LOKAL';
-CREATE DATABASE bimbel_db OWNER bimbel_user;
-```
-
-Jalankan SQL tersebut melalui `psql` sebagai administrator PostgreSQL. Jika role/database sudah tersedia, jangan membuatnya kembali.
-
-### Langkah 5 — Buat file `.env`
-
-Salin template:
-
-```powershell
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Edit `.env`, lalu isi konfigurasi database dan layanan yang akan digunakan. Lihat bagian [Konfigurasi .env](#5-konfigurasi-env).
+### 3. Persiapan database
 
-### Langkah 6 — Buat skema dan data contoh
-
-Untuk **database baru yang masih kosong**, jalankan skema terkini satu kali:
+Untuk **instalasi baru pada database kosong**, periksa terlebih dahulu bahwa `sibima_db` belum digunakan. Jalankan skrip berikut secara berurutan:
 
 ```powershell
-psql -U bimbel_user -d bimbel_db -h localhost -v ON_ERROR_STOP=1 -f sql/schema.sql
+psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f ".\sql\00_buat_database.sql"
+psql -U postgres -d sibima_db -v ON_ERROR_STOP=1 -f ".\sql\schema.sql"
+psql -U postgres -d sibima_db -v ON_ERROR_STOP=1 -f ".\sql\02_kompatibilitas_dan_operasional.sql"
+psql -U postgres -d sibima_db -v ON_ERROR_STOP=1 -f ".\sql\04_validasi.sql"
 ```
 
-Kemudian masukkan data contoh:
+Alternatif melalui pgAdmin: jalankan skrip pembuatan database pada koneksi `postgres`, lalu buka Query Tool pada `sibima_db` untuk menjalankan tiga skrip berikutnya secara berurutan.
+
+Opsional, isi contoh program dan ruangan:
 
 ```powershell
-psql -U bimbel_user -d bimbel_db -h localhost -v ON_ERROR_STOP=1 -f sql/seed.sql
+psql -U postgres -d sibima_db -v ON_ERROR_STOP=1 -f ".\sql\03_seed_demo.sql"
 ```
 
-`seed.sql` menambahkan contoh ruang dan program. Skrip ini tidak membuat akun admin.
+Jangan menjalankan ulang schema pada database aktif atau menjalankan arsip migrasi lama pada `sibima_db`. Seed demo hanya digunakan sesuai prasyaratnya agar tidak terjadi konflik data.
 
-### Langkah 7 — Buat admin pertama
+### 4. Konfigurasi environment
 
-```powershell
-python buat_admin.py
-```
-
-Masukkan username, email, nama lengkap, dan password admin ketika diminta. Password diketik tanpa ditampilkan di terminal.
-
-### Langkah 8 — Jalankan aplikasi
-
-```powershell
-python -m app.main
-```
-
-> Jangan menjalankan `schema.sql` berulang kali pada database yang sudah berisi skema. File tersebut merupakan skema lengkap untuk instalasi baru, bukan skrip pembaruan database.
-
----
-
-## 5. Konfigurasi `.env`
-
-Gunakan `.env.example` sebagai template. Variabel yang dibaca aplikasi:
-
-| Variabel | Fungsi | Nilai contoh/default |
-|---|---|---|
-| `DB_HOST` | Host PostgreSQL | `localhost` |
-| `DB_PORT` | Port PostgreSQL | `5432` |
-| `DB_NAME` | Nama database | `bimbel_db` |
-| `DB_USER` | Role database | `bimbel_user` |
-| `DB_PASSWORD` | Password role database | Isi sendiri |
-| `OTP_MODE` | Mode OTP: `simulasi` atau `email` | `simulasi` |
-| `OTP_EXPIRE_MINUTES` | Masa berlaku OTP | `5` |
-| `OTP_MAX_ATTEMPTS` | Maksimal percobaan OTP | `3` |
-| `MAX_LOGIN_ATTEMPTS` | Batas percobaan login gagal | `3` |
-| `LOCK_MINUTES` | Lama penguncian setelah gagal login | `5` |
-| `SMTP_HOST` | Host SMTP | `smtp.gmail.com` |
-| `SMTP_PORT` | Port SMTP | `587` |
-| `SMTP_USER` | Akun pengirim email | Kosong sampai dikonfigurasi |
-| `SMTP_PASSWORD` | Kredensial SMTP/app password | Kosong sampai dikonfigurasi |
-| `GEMINI_API_KEY` | API key Gemini untuk Tanya AI | Kosong jika tidak digunakan |
-| `PAYMENT_SIMULATION_SUCCESS_RATE` | Persentase simulasi pembayaran berhasil | `90` |
-
-Contoh:
+Edit `.env` dari template yang telah disalin. Contoh konfigurasi pengujian lokal:
 
 ```dotenv
+DB_TARGET=local
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=bimbel_db
-DB_USER=bimbel_user
-DB_PASSWORD=password_lokal_yang_kuat
+DB_NAME=sibima_db
+DB_USER=postgres
+DB_PASSWORD=<password-postgresql-lokal>
+DB_SSLMODE=prefer
 
 OTP_MODE=simulasi
 OTP_EXPIRE_MINUTES=5
 OTP_MAX_ATTEMPTS=3
-
-MAX_LOGIN_ATTEMPTS=3
-LOCK_MINUTES=5
-
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASSWORD=
+PAYMENT_SIMULATION_SUCCESS_RATE=90
 
 GEMINI_API_KEY=
-PAYMENT_SIMULATION_SUCCESS_RATE=90
+GEMINI_MODEL=gemini-3.5-flash-lite
+SIBIMA_RAG_ENABLED=false
 ```
 
-Ketentuan:
-- `OTP_MODE=simulasi`: OTP ditampilkan melalui alur simulasi di terminal.
-- `OTP_MODE=email`: SMTP harus dikonfigurasi agar OTP dapat dikirim.
-- `PAYMENT_SIMULATION_SUCCESS_RATE` menerima angka `0` sampai `100`. Nilai `0` membuat simulasi selalu gagal; nilai `100` membuat simulasi selalu berhasil.
-- Jangan menggunakan password contoh di atas untuk server atau akun sungguhan.
-- Jangan membagikan file `.env`. File tersebut sudah dicantumkan dalam `.gitignore`.
+`DB_USER=postgres` merupakan contoh untuk pengujian lokal. Untuk penggunaan selain demo, gunakan role aplikasi khusus yang telah memperoleh hak akses minimum yang diperlukan.
 
----
+- Isi `GEMINI_API_KEY` secara lokal dan pilih model yang tersedia pada API key untuk menggunakan AI.
+- Aktifkan RAG hanya setelah dokumen pengetahuan dan indeks lokal siap serta sesuai skema terkini.
+- Untuk `OTP_MODE=email`, isi variabel SMTP pada `.env` sesuai layanan pengiriman email yang digunakan.
+- Jangan commit file `.env`, password, API key, atau kredensial SMTP.
 
-## 6. Menjalankan aplikasi
-
-Pastikan virtual environment aktif, `.env` sudah diisi, dan PostgreSQL berjalan.
+### 5. Inisialisasi Admin pertama
 
 ```powershell
-python -m app.main
+.\.venv\Scripts\python.exe buat_admin.py
 ```
 
-Menu awal menyediakan:
-- Login.
-- Register sebagai Siswa atau Tutor.
-- Lupa Password.
-- Keluar.
+Masukkan username, email, nama lengkap, dan password pada prompt terminal. Jalankan langkah ini hanya apabila belum ada Admin yang perlu digunakan.
 
-Setelah login, aplikasi menampilkan menu sesuai role akun. Detail menu dan submenu tersedia pada [MENU_CLI.md](MENU_CLI.md).
-
----
-
-## 7. Alur akun dan OTP
-
-1. Calon Siswa atau Tutor memilih Register.
-2. Pendaftar mengisi data akun.
-3. Sistem memvalidasi data dan mengirim/memperlihatkan OTP sesuai `OTP_MODE`.
-4. OTP memiliki masa berlaku dan batas percobaan sesuai konfigurasi.
-5. Setelah OTP benar, akun berstatus `menunggu_konfirmasi`.
-6. Admin memeriksa pendaftaran akun melalui Pusat Konfirmasi.
-7. Jika disetujui, akun menjadi `aktif`. NIS siswa atau kode tutor diterbitkan.
-8. Jika ditolak, alasan penolakan disimpan.
-9. Akun aktif dapat login ke menu sesuai role.
-
-Password disimpan menggunakan hash bcrypt. OTP disimpan dalam bentuk hash, bukan kode OTP asli.
-
----
-
-## 8. Alur pendaftaran dan pembayaran
-
-### Pendaftaran program berbayar
-
-1. Siswa memilih program yang tersedia dan mengonfirmasi pendaftaran.
-2. Sistem membuat enrollment berstatus `menunggu_pembayaran` dan invoice pertama.
-3. Sistem membuat dokumen invoice dan mengirim email jika konfigurasi email tersedia.
-4. Siswa memilih `Bayar Sekarang`.
-5. Mesin simulasi internal menentukan hasil berdasarkan konfigurasi keberhasilan:
-   - **Berhasil:** pembayaran dan invoice menjadi `lunas`; enrollment masuk antrean konfirmasi admin dengan status `menunggu`.
-   - **Gagal:** invoice tetap `belum_dibayar`; siswa dapat mencoba lagi.
-6. Admin menerima atau menolak pendaftaran, bukan mengonfirmasi transaksi pembayaran.
-7. Jika admin menerima, enrollment menjadi `aktif`.
-8. Jika admin menolak pendaftaran yang sudah dibayar, sistem mencatat refund simulasi secara terpisah dan memperbarui status terkait.
-
-### Program gratis
-
-Program dengan harga nol tidak memerlukan invoice atau pembayaran. Pendaftaran langsung masuk antrean keputusan admin.
-
-### Pembayaran bulanan
-
-Admin membuat tagihan bulanan untuk enrollment aktif. Siswa melakukan checkout simulasi. Hasil berhasil memperbarui invoice/payment secara otomatis; hasil gagal membiarkan invoice belum dibayar agar dapat dicoba kembali.
-
-### Penting
-
-Pembayaran dan refund di SIBIMA adalah **simulasi internal**. Tidak ada uang sungguhan yang ditransfer, tidak ada koneksi bank, dan tidak ada payment gateway.
-
----
-
-## 9. Pengumuman dan notifikasi
-
-- Admin membuat pengumuman melalui menu **Komunikasi**.
-- Setiap pengumuman dapat ditujukan kepada Siswa, Tutor, atau keduanya.
-- Siswa dan Tutor membaca pengumuman dari menu **Notifikasi**, bukan dari dashboard.
-- Status baca dicatat per pengguna. Status baca satu pengguna tidak mengubah status baca pengguna lain.
-- Notifikasi yang belum dibaca ditandai `BARU`; menu menampilkan jumlah belum dibaca jika jumlahnya lebih dari nol.
-- Admin dapat melihat pengumuman aktif dan arsip.
-- Pengumuman yang diarsipkan tidak ditampilkan lagi kepada Siswa/Tutor. Arsip tidak memiliki fitur pemulihan melalui menu.
-
----
-
-## 10. Database dan migrasi
-
-### Objek pada `sql/schema.sql`
-
-Skema terkini dalam arsip ini mendefinisikan:
-
-**18 tabel**
-- `users`
-- `otp_codes`
-- `students`
-- `tutors`
-- `programs`
-- `rooms`
-- `schedules`
-- `enrollments`
-- `invoices`
-- `payments`
-- `payment_refunds`
-- `class_sessions`
-- `attendances`
-- `grades`
-- `announcements`
-- `announcement_targets`
-- `announcement_reads`
-- `activity_logs`
-
-**5 view**
-- `v_program_kuota`
-- `v_tagihan_status`
-- `v_pemasukan_bulanan`
-- `v_rekap_kehadiran`
-- `v_nilai_akhir`
-
-**12 tipe**
-- 11 ENUM dan satu range type `timerange`.
-
-### Instalasi baru vs database yang sudah berjalan
-
-- **Database baru/kosong:** gunakan `sql/schema.sql`, lalu `sql/seed.sql`.
-- **Database lama yang sudah berisi data:** backup terlebih dahulu dan tentukan versi skema asal. Jangan menjalankan `schema.sql` penuh di atas database yang sudah ada.
-- File dalam `sql/migrations/` adalah migrasi historis untuk jalur pembaruan dari versi sebelumnya. Migrasi harus dipilih dan dijalankan sesuai kondisi database asal, bukan dijalankan secara acak atau diulang tanpa pemeriksaan.
-- `sql/permissions/20261026_laporan_select.sql` memberikan hak `SELECT` untuk objek laporan. Jalankan hanya jika diperlukan, sebagai pemilik objek atau administrator PostgreSQL. Jika role database bukan `bimbel_user`, sesuaikan nama role dalam skrip sebelum digunakan.
-
-### Backup
-
-Contoh membuat backup:
+### 6. Jalankan aplikasi
 
 ```powershell
-pg_dump -U bimbel_user -h localhost -d bimbel_db -F c -f backup_sibima.dump
+.\.venv\Scripts\python.exe -m app.main
 ```
 
-Contoh pemulihan ke database tujuan yang sudah disiapkan:
+## Pengujian
 
 ```powershell
-pg_restore -U bimbel_user -h localhost -d bimbel_db --clean --if-exists backup_sibima.dump
+.\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Perintah pemulihan dapat mengganti objek database tujuan. Pastikan target benar dan backup tersedia sebelum menjalankannya.
+Skenario pengujian utama meliputi autentikasi, akses per role, pendaftaran, transaksi pembayaran, jadwal, pertemuan, kehadiran, nilai, laporan, dan pembatasan akses AI. Beberapa pengujian integrasi memerlukan konfigurasi PostgreSQL atau Gemini yang sesuai. Tes historis yang masih memakai asumsi skema lama perlu ditinjau sebelum dianggap sebagai hasil pengujian final.
+
+## Keamanan dan Batasan
+
+- Password disimpan sebagai hash bcrypt, bukan teks biasa. OTP memiliki batas waktu dan percobaan.
+- Persetujuan akun dan otorisasi diterapkan melalui alur aplikasi.
+- Tool AI untuk membaca database dibatasi berdasarkan role; pengujian akses antarpengguna tetap diperlukan.
+- Gunakan akun serta data fiktif untuk demonstrasi, dan backup database sebelum impor data atau menjalankan migrasi.
+- Sistem ditujukan untuk pembelajaran, demonstrasi, dan pengembangan; belum diklaim siap untuk produksi tanpa pengujian end-to-end dan hardening tambahan.
 
 ---
 
-## 11. Pengujian
+<div align="center">
 
-Jalankan dari root proyek dengan virtual environment aktif:
+**SIBIMA-AI**
 
-```powershell
-python -m pytest
-```
+*Sistem informasi bimbingan belajar yang mengintegrasikan administrasi, akademik, dan kecerdasan buatan.*
 
-Untuk melihat detail setiap test:
+Dikembangkan sebagai proyek pembelajaran di bidang Teknologi Informasi.
 
-```powershell
-python -m pytest -v
-```
-
-Jika test gagal dikoleksi karena dependensi belum tersedia, pasang ulang dependensi:
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-Pengujian otomatis tidak menggantikan pengujian integrasi PostgreSQL, SMTP, atau pemeriksaan alur UI secara manual. Catat hasil pengujian aktual; jangan menyimpulkan seluruh sistem lulus hanya dari sebagian test.
-
----
-
-## 12. Pemecahan masalah
-
-### `ModuleNotFoundError`
-Pastikan virtual environment aktif dan pasang dependensi:
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-### Konfigurasi database belum lengkap
-Pastikan file `.env` ada di root proyek dan nilai `DB_NAME`, `DB_USER`, serta `DB_PASSWORD` sudah diisi.
-
-### Koneksi PostgreSQL gagal
-Periksa:
-- Service PostgreSQL sedang berjalan.
-- Database dan role sudah dibuat.
-- Host dan port benar.
-- Password pada `.env` cocok.
-- Role memiliki hak akses ke database dan objek yang digunakan.
-
-### Laporan gagal karena `InsufficientPrivilege`
-Periksa instruksi yang ditampilkan aplikasi. Skrip hak akses laporan berada di `sql/permissions/20261026_laporan_select.sql`. Jalankan dengan akun pemilik objek/administrator setelah memeriksa dan menyesuaikan nama role bila diperlukan.
-
-### Email tidak terkirim
-Pastikan `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, dan `SMTP_PASSWORD` benar. Untuk penyedia email yang memerlukan app password, gunakan kredensial aplikasi sesuai kebijakan penyedia email.
-
-### Tanya AI tidak tersedia
-Fitur ini memerlukan `GEMINI_API_KEY` yang valid. Fitur AI bersifat opsional.
-
----
-
-## 13. Batasan implementasi saat ini
-
-Dokumentasi ini mengikuti menu dan modul yang ada pada arsip kode yang disinkronkan. Beberapa batasan penting:
-
-- Pembayaran/refund hanya simulasi internal, bukan transaksi finansial nyata.
-- Tidak ada integrasi payment gateway.
-- Modul kuis mandiri, bank soal, riwayat pengerjaan kuis, rating tutor, feedback siswa, permohonan izin, dan penggajian tutor tidak termasuk dalam menu/skema versi ini.
-- Nilai dengan jenis `kuis` tetap dapat dicatat secara manual oleh Tutor; ini bukan modul kuis mandiri.
-- Pengumuman dikirim sebagai notifikasi dalam aplikasi, bukan email massal.
-- Menu Tanya AI saat ini hanya menampilkan informasi bahwa fitur belum diaktifkan. Mengisi `GEMINI_API_KEY` saja belum membuat fitur tersebut berfungsi.
-- PDF konfirmasi pendaftaran tidak didokumentasikan sebagai fitur yang tersedia pada versi ini. Bukti invoice/pembayaran/refund merupakan dokumen yang berbeda.
-
----
-
-Dokumentasi ini menjelaskan struktur dan perilaku yang ditemukan pada versi kode SIBIMA yang disinkronkan. Jika implementasi berubah, perbarui README dan MENU_CLI bersamaan dengan perubahan kode.
+</div>
