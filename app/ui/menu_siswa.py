@@ -10,7 +10,8 @@ from rich.table import Table
 from app import session
 from app.repositories import enrollment_repo, program_repo, user_repo
 from app.services import billing_service, enrollment_service, engagement_service, student_service
-from app.ui import menu_pembayaran, menu_siswa_academic, menu_notifikasi
+from app.ui import menu_siswa_academic, menu_notifikasi
+from app.ui import student_billing as menu_pembayaran
 from app.ui.jadwal_context import jadwal_rutin_terdekat, jam_jadwal, kondisi_jadwal_siswa
 from rich.markup import escape
 from app.ui.console import (
@@ -286,104 +287,8 @@ def _dashboard(pengguna, enrollments):
 
 
 def menu_katalog(pengguna):
-    """Menampilkan program yang tersedia dan mengajukan enrollment."""
-    while True:
-        bersihkan_layar()
-        console.print(
-            Panel(
-                "[bold cyan]KATALOG PROGRAM[/bold cyan]\n"
-                "[white]Pilih program yang sesuai dengan kebutuhan belajarmu.[/white]",
-                border_style="cyan",
-                padding=(1, 3),
-                expand=True,
-            )
-        )
-
-        try:
-            semua_program = program_repo.daftar_program_buka_dengan_kuota()
-            enrollments = _ambil_pendaftaran(pengguna["id"])
-        except psycopg.Error as exc:
-            gagal(f"Gagal memuat katalog dari database ({type(exc).__name__}).")
-            _jeda()
-            return
-
-        # Hanya pendaftaran yang sedang berjalan yang menghalangi daftar ulang.
-        # Riwayat batal/ditolak/selesai tetap tercatat, tetapi bisa daftar baru.
-        sedang_diikuti = {
-            item["program_id"] for item in enrollments
-            if item["status"] in {"menunggu_pembayaran", "menunggu", "aktif"}
-        }
-        program_tersedia = [p for p in semua_program if p["id"] not in sedang_diikuti]
-
-        if program_tersedia:
-            menu_siswa_academic.tampilkan_katalog_paginasi(program_tersedia)
-        else:
-            tabel = Table(title="Program Buka dengan Kuota", header_style="bold cyan", expand=True)
-            tabel.add_column("Kode", width=8)
-            tabel.add_column("Nama program", min_width=24)
-            tabel.add_column("Jenjang", width=12)
-            tabel.add_column("Biaya/bulan", justify="right", min_width=16)
-            tabel.add_column("Kuota", justify="center", width=12)
-            tabel.add_column("Deskripsi", min_width=24, overflow="fold")
-            tabel.add_row("—", "Tidak ada program baru yang tersedia", "—", "—", "—", "—")
-            console.print(tabel)
-
-        if semua_program and not program_tersedia:
-            info(
-                "Semua program yang tersedia sedang kamu ikuti atau masih menunggu proses. "
-                "Program yang dibatalkan dapat didaftarkan ulang setelah pendaftaran sebelumnya ditutup."
-            )
-
-        dipilih = menu_siswa_academic.pilih_data_paginasi(
-            "Pilih program untuk didaftarkan",
-            program_tersedia,
-            lambda p: f"Daftar: {p['nama']} | {p['jenjang']} | {rupiah(p.get('harga_bulanan') or 0)} | sisa {p.get('sisa', 0)}",
-            "id",
-        )
-        if dipilih is None:
-            return
-
-        program = next((p for p in program_tersedia if p["id"] == dipilih), None)
-        if program is None:
-            peringatan("Program pilihan tidak ditemukan. Muat ulang katalog.")
-            _jeda()
-            continue
-
-        console.print(
-            Panel(
-                f"[bold]{program['nama']}[/bold]\n"
-                f"Kode: {program['kode']}\n"
-                f"Jenjang: {program['jenjang']}\n"
-                f"Biaya per bulan: [cyan]{rupiah(program.get('harga_bulanan') or 0)}[/cyan]\n"
-                f"Sisa kuota: {program.get('sisa', 0)}\n\n"
-                f"{program.get('deskripsi') or 'Belum ada deskripsi.'}",
-                title="DETAIL PROGRAM",
-                border_style="cyan",
-                padding=(1, 2),
-                expand=True,
-            )
-        )
-
-        konfirmasi = questionary.confirm(
-            "Lanjutkan pendaftaran dan buat invoice otomatis jika program berbayar?",
-            default=False,
-            style=GAYA_SIBIMA,
-        ).ask()
-
-        if not konfirmasi:
-            continue
-
-        berhasil, pesan = enrollment_service.daftar_program(
-            student_id=pengguna["id"],
-            program_id=dipilih,
-        )
-        if berhasil:
-            sukses(pesan)
-            _jeda("Tekan Enter untuk kembali ke dashboard...")
-            return
-
-        gagal(pesan)
-        _jeda()
+    """UI-007B: one selectable catalog and a bounded registration detail."""
+    return menu_siswa_academic.menu_katalog(pengguna)
 
 
 def menu_status_pendaftaran(pengguna, enrollments):

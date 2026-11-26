@@ -1,110 +1,41 @@
-"""Dashboard dan navigasi Tutor dengan layout konsisten bersama Admin."""
-
-import questionary
-from questionary import Choice, Separator, Style
-from rich.align import Align
-from rich.box import ROUNDED
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
-
+"""Dashboard dan navigasi Tutor UI-008."""
 from app import session
-from app.ui.console import console, bersihkan_layar, gagal, sukses
-from app.ui.tutor_dashboard_grid import tampilkan_dashboard_tutor
-from app.ui import menu_tutor_academic, menu_notifikasi, menu_tutor_pengumuman, menu_tutor_tertunda
-from app.services import engagement_service
+from app.ui.console import bersihkan_layar, gagal, sukses
+from app.ui.tutor_workspace import TutorDashboardNavigator
+from app.ui import tutor_academic, tutor_communication
 
-_GAYA = Style([
-    ("qmark", "fg:#00ffff bold"),
-    ("question", "fg:#ffffff bold"),
-    ("answer", "fg:#00ffff bold"),
-    ("pointer", "fg:#00ffff bold"),
-    ("highlighted", "fg:#00ffff bold"),
-    ("selected", "fg:#00ffff"),
-    ("separator", "fg:#526477"),
-    ("instruction", "fg:#91a4b7 italic"),
-])
-
-_MENU_AKADEMIK = [
-    ("Jadwal & Detail Kelas", "jadwal"),
-    ("Kelas dan Siswa", "kelas"),
-    ("Absensi", "absensi"),
-    ("Nilai", "nilai"),
-    ("Catatan Materi", "materi"),
-]
-_MENU_AKUN = [("Profil Saya", "profil")]
-
-
-def _dashboard(pengguna):
-    """Tampilkan informasi jadwal dan aktivitas Tutor dari database (PATCH-007B)."""
-    tampilkan_dashboard_tutor(pengguna)
 
 def jalankan():
+    navigator=TutorDashboardNavigator()
     while True:
-        pengguna = session.get_user()
-        if not pengguna or pengguna.get("role") != "tutor":
-            gagal("Akses ditolak. Silakan login menggunakan akun tutor.")
+        pengguna=session.get_user()
+        if not pengguna or pengguna.get('role')!='tutor':
+            gagal('Akses ditolak. Silakan login menggunakan akun tutor.')
             return
-
-        bersihkan_layar()
-        _dashboard(pengguna)
-
-        try:
-            engagement_service.sinkronisasi_notifikasi("tutor")
-            jumlah_belum_dibaca = engagement_service.jumlah_notifikasi_belum_dibaca("tutor")
-        except Exception:
-            jumlah_belum_dibaca = 0
-        label_notifikasi = (
-            f"  {len(_MENU_AKADEMIK) + 1:02d}  Notifikasi ({jumlah_belum_dibaca} belum dibaca)"
-            if jumlah_belum_dibaca > 0 else f"  {len(_MENU_AKADEMIK) + 1:02d}  Notifikasi"
-        )
-
-        choices = [Separator("────────── AKADEMIK ──────────")]
-        choices.extend(
-            Choice(f"  {index:02d}  {label}", value=kode)
-            for index, (label, kode) in enumerate(_MENU_AKADEMIK, start=1)
-        )
-        choices.append(Choice(label_notifikasi, value="notifikasi"))
-        choices.append(Choice(f"  {len(_MENU_AKADEMIK) + 2:02d}  Pengumuman Kelas", value="pengumuman_tutor"))
-        choices.append(Choice(f"  {len(_MENU_AKADEMIK) + 3:02d}  Pertemuan Tertunda", value="tertunda"))
-        choices.append(Choice("  🤖  SIBIMA-AI", value="ai"))
-        choices.append(Separator("────────── AKUN ──────────────"))
-        choices.extend(
-            Choice(f"  {index:02d}  {label}", value=kode)
-            for index, (label, kode) in enumerate(_MENU_AKUN, start=len(_MENU_AKADEMIK) + 4)
-        )
-        choices.extend([
-            Separator("─────────────────────────────"),
-            Choice("  00  Logout", value="logout"),
-        ])
-
-        pilihan = questionary.select(
-            "MENU TUTOR  •  Pilih modul:",
-            choices=choices,
-            style=_GAYA,
-            qmark="⚡",
-            pointer="▶",
-            instruction=" (↑/↓ navigasi • Enter pilih)",
-        ).ask()
-        if pilihan is None or pilihan == "logout":
+        pilihan=navigator.run(pengguna)
+        if pilihan=='refresh':
+            continue
+        if pilihan is None or pilihan=='logout':
             session.logout()
             bersihkan_layar()
-            sukses("Logout berhasil. Sesi telah ditutup.")
-            input("\nTekan Enter untuk kembali ke menu utama...")
+            sukses('Logout berhasil. Sesi telah ditutup.')
+            try:
+                input('\nTekan Enter untuk kembali ke menu utama...')
+            except (EOFError,KeyboardInterrupt):
+                pass
             return
-
         if pilihan == "ai":
             from app.services.ai_service import buka_ai
             buka_ai("tutor")
-        elif pilihan == "notifikasi":
-            tujuan = menu_notifikasi.jalankan("tutor")
-            if tujuan == "tertunda":
-                menu_tutor_tertunda.jalankan()
+        elif pilihan=='notifikasi':
+            tujuan=tutor_communication.notifikasi()
+            if tujuan=='tertunda':
+                tutor_communication.tertunda()
             elif tujuan:
-                menu_tutor_academic.jalankan_modul(tujuan)
-        elif pilihan == "pengumuman_tutor":
-            menu_tutor_pengumuman.jalankan()
-        elif pilihan == "tertunda":
-            menu_tutor_tertunda.jalankan()
+                tutor_academic.jalankan_modul(tujuan)
+        elif pilihan=='pengumuman_tutor':
+            tutor_communication.pengumuman()
+        elif pilihan=='tertunda':
+            tutor_communication.tertunda()
         else:
-            menu_tutor_academic.jalankan_modul(pilihan)
+            tutor_academic.jalankan_modul(pilihan)

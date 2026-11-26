@@ -138,6 +138,9 @@ def _daftar(role, *, arsip=False):
 
 def jalankan(role: str):
     """Mengembalikan kode menu tujuan bila dipilih aksi cepat; caller menavigasi."""
+    if role == 'siswa':
+        from app.ui.student_notifications import jalankan_siswa
+        return jalankan_siswa()
     if role not in ('siswa','tutor'):
         gagal('Peran tidak valid.');return None
     try:
