@@ -1,427 +1,311 @@
+"""UI-001: autentikasi SIBIMA, satu workspace tanpa mengubah kontrak service.
 
-import questionary
-from questionary import Style, Choice, Separator
-from rich.console import Console
-from rich.panel import Panel
-from rich.align import Align
+Menu, urutan operasi, role, dan validasi berasal dari CLI sebelumnya.
+Dashboard lama tetap dijalankan di luar alternate screen autentikasi.
+"""
+from __future__ import annotations
 
-# Mengimpor modul layanan dan utilitas UI (Pastikan gagal dan sukses ada di console.py)
-from app import session
-from app.services import auth_service
-from app.ui.console import info, peringatan, bersihkan_layar, sukses, gagal
+from .auth_workspace import AuthWorkspace, Field
 
-console = Console()
-
-tema_sibima = Style([
-    ('qmark', 'fg:#00ffff bold'),
-    ('question', 'fg:#ffffff bold'),
-    ('answer', 'fg:#00ffff bold'),
-    ('pointer', 'fg:#00ffff bold'),
-    ('highlighted', 'fg:#00ffff bold'),
-    ('selected', 'fg:#00ffff'),
-    ('separator', 'fg:#444444'),
-    ('instruction', 'fg:#888888 italic')
-])
-
-def tampilkan_header(halaman="Utama"):
-    """Tampilkan header untuk semua halaman, termasuk halaman baru."""
-    header = {
-        "Utama": (
-            "S I B I M A",
-            "S I S T E M   I N F O R M A S I   B I M B E L",
-        ),
-        "Login": (
-            "L O G I N",
-            "O T E N T I K A S I   P E N G G U N A",
-        ),
-        "Register": (
-            "R E G I S T E R",
-            "P E N D A F T A R A N   A K U N",
-        ),
-        "Verifikasi OTP": (
-            "S I B I M A   K E C E",
-            "V E R I F I K A S I   E M A I L",
-        ),
-        "Lupa Password": (
-            "R E S E T   P A S S W O R D",
-            "P E M U L I H A N   A K U N   D E N G A N   O T P",
-        ),
-        "Ganti Password Sementara": (
-            "G A N T I   P A S S W O R D",
-            "P E R G A N T I A N   P A S S W O R D   W A J I B",
-        ),
-    }
-    judul, sub = header.get(
-        halaman,
-        (str(halaman).upper(), "S I S T E M   I N F O R M A S I   B I M B E L"),
-    )
-
-    isi_teks = f"[bold cyan]{judul}[/bold cyan]\n[bold white]{sub}[/bold white]"
-    
-    panel = Panel(
-        Align.center(isi_teks), 
-        border_style="cyan",
-        padding=(1, 6)
-    )
-    console.print(panel)
-    print()
+MAIN_CHOICES = (
+    ('Login', '01  Masuk ke Akun'),
+    ('Register', '02  Pendaftaran Baru'),
+    ('Lupa Password', '03  Lupa Password'),
+    ('Keluar', '00  Keluar'),
+)
+ROLE_CHOICES = (('siswa', 'Siswa'), ('tutor', 'Tutor'), ('back', 'Kembali'))
+OTP_CHOICES = (
+    ('verifikasi', 'Masukkan kode OTP'),
+    ('kirim_ulang', 'Kirim ulang OTP'),
+    ('selesai', 'Selesai / kembali'),
+)
+ERROR_GENERIC = 'Operasi belum dapat diselesaikan. Periksa koneksi dan coba kembali.'
 
 
-def menu_verifikasi_registrasi(username):
-    """Halaman verifikasi OTP yang digambar ulang agar tidak menumpuk."""
-    pesan_status = (
-        "Masukkan kode dari email pendaftaran. "
-        "Jika belum menerima kode, gunakan menu kirim ulang."
-    )
-    warna_status = "cyan"
+class AuthController:
+    """Adapter interaksi baru untuk service yang sama; dapat diuji tanpa database."""
 
-    while True:
-        # Satu halaman aktif pada satu waktu.
-        bersihkan_layar()
-        tampilkan_header("Verifikasi OTP")
+    def __init__(self, auth, user_lookup):
+        self.auth = auth
+        self.user_lookup = user_lookup
 
-        console.print(
-            Panel(
-                f"[bold white]Akun:[/] [cyan]{username}[/cyan]\n\n"
-                "[white]Masukkan kode OTP yang dikirim ke email "
-                "pendaftaran.[/white]\n\n"
-                "[dim]Periksa Inbox dan Spam. Kode hanya berlaku "
-                "selama waktu yang ditentukan dan tidak boleh "
-                "dibagikan kepada siapa pun.[/dim]",
-                title="[bold cyan]VERIFIKASI EMAIL[/bold cyan]",
-                border_style="cyan",
-                padding=(1, 3),
-                expand=True,
+    async def _request(self, view, label, method, *args):
+        try:
+            return await view.busy(label, getattr(self.auth, method), *args)
+        except Exception:
+            # Jangan tampilkan traceback, kredensial, atau detail koneksi.
+            return False, ERROR_GENERIC
+
+    async def menu_verifikasi_registrasi(self, view, username, message=''):
+        notice = message or 'Periksa Inbox/Spam untuk kode OTP.'
+        style = 'warning' if 'OTP belum berhasil dikirim' in notice else 'muted'
+        while True:
+            choice = await view.menu(
+                'VERIFIKASI EMAIL', OTP_CHOICES,
+                subtitle=f'Akun: {username}',
+                notice=notice, notice_style=style,
             )
-        )
-
-        console.print(
-            Panel(
-                pesan_status,
-                title="[bold]STATUS[/bold]",
-                border_style=warna_status,
-                padding=(0, 2),
-                expand=True,
-            )
-        )
-
-        pilihan = questionary.select(
-            "Pilih tindakan:",
-            choices=[
-                Choice(
-                    "🔐  Masukkan kode OTP",
-                    value="verifikasi",
-                ),
-                Choice(
-                    "📨  Kirim ulang OTP",
-                    value="kirim_ulang",
-                ),
-                Separator("────────────────────────"),
-                Choice(
-                    "↩  Selesai / kembali",
-                    value="selesai",
-                ),
-            ],
-            style=tema_sibima,
-            qmark="⚡",
-            pointer="▶",
-            instruction=" (Gunakan ↑/↓ lalu Enter)",
-        ).ask()
-
-        if pilihan is None or pilihan == "selesai":
-            return
-
-        if pilihan == "kirim_ulang":
-            berhasil, pesan = (
-                auth_service.kirim_ulang_otp_registrasi(username)
-            )
-
-            pesan_status = pesan
-            warna_status = "green" if berhasil else "red"
-            continue
-
-        kode = questionary.text(
-            "Masukkan 6 digit OTP:",
-            style=tema_sibima,
-            qmark="🔐",
-        ).ask()
-
-        if kode is None:
-            pesan_status = "Proses dibatalkan. Pilih tindakan berikutnya."
-            warna_status = "yellow"
-            continue
-
-        kode = kode.strip()
-
-        if not kode:
-            pesan_status = "Kode OTP wajib diisi."
-            warna_status = "red"
-            continue
-
-        berhasil, pesan = (
-            auth_service.verifikasi_otp_registrasi(
-                username,
-                kode,
-            )
-        )
-
-        pesan_status = pesan
-        warna_status = "green" if berhasil else "red"
-
-        if berhasil:
-            # Tampilkan hasil akhir pada satu layar yang bersih.
-            bersihkan_layar()
-            tampilkan_header("Verifikasi OTP")
-
-            console.print(
-                Panel(
-                    f"[bold green]✓ {pesan}[/bold green]\n\n"
-                    "[white]Selanjutnya, tunggu persetujuan admin "
-                    "untuk mengaktifkan akun.[/white]",
-                    title="[bold green]VERIFIKASI BERHASIL[/bold green]",
-                    border_style="green",
-                    padding=(1, 3),
-                    expand=True,
-                )
-            )
-
-            input("\nTekan Enter untuk kembali...")
-            return
-
-
-def _proses_password_sementara(user, password_lama):
-    """Memaksa pemilik akun mengganti password sementara sebelum masuk dashboard."""
-    bersihkan_layar()
-    tampilkan_header("Ganti Password Sementara")
-    console.print(Panel(
-        "Admin telah mereset password akun ini. Demi keamanan, buat password pribadi baru sebelum masuk dashboard.",
-        title="PERGANTIAN PASSWORD WAJIB", border_style="yellow", padding=(1, 2),
-    ))
-    for percobaan in range(3):
-        baru = questionary.password("Password baru (8-64 karakter, minimal satu huruf dan satu angka):", style=tema_sibima, qmark="🔐").ask()
-        if baru is None:
-            info("Login dibatalkan; password sementara masih berlaku.")
-            return None
-        konfirmasi = questionary.password("Ulangi password baru:", style=tema_sibima, qmark="🔁").ask()
-        if konfirmasi is None:
-            info("Login dibatalkan; password sementara masih berlaku.")
-            return None
-        if baru != konfirmasi:
-            gagal("Konfirmasi password tidak sama. Coba kembali.")
-            continue
-        if baru == password_lama:
-            gagal("Password baru harus berbeda dari password sementara.")
-            continue
-        berhasil, pesan = auth_service.ganti_password(user["id"], password_lama, baru)
-        if not berhasil:
-            gagal(pesan)
-            continue
-        from app.repositories import user_repo
-        terbaru = user_repo.cari_by_id(user["id"])
-        if not terbaru or terbaru.get("must_change_password"):
-            gagal("Password belum dapat dikonfirmasi tersimpan. Silakan coba login kembali.")
-            return None
-        sukses("Password berhasil diganti.")
-        return terbaru
-    gagal("Batas percobaan pergantian password tercapai. Silakan login kembali.")
-    return None
-
-
-def menu_login():
-    bersihkan_layar()
-    tampilkan_header("Login")
-    
-    # Menangkap input. Menggunakan qmark kustom agar form terlihat konsisten
-    username = questionary.text("Username:", style=tema_sibima, qmark="👤").ask()
-    if not username: return  # Batal jika pengguna menekan Ctrl+C
-    
-    password = questionary.password("Password:", style=tema_sibima, qmark="🔑").ask()
-    if not password: return
-
-    info("Memverifikasi kredensial...")
-    
-    # Eksekusi logika bisnis
-    berhasil, hasil = auth_service.login(username, password)
-    
-    if berhasil:
-        if hasil.get("must_change_password"):
-            hasil = _proses_password_sementara(hasil, password)
-            if hasil is None:
+            if choice in (None,'selesai'):
                 return
+            if choice=='kirim_ulang':
+                ok,notice = await self._request(view, 'Mengirim ulang kode OTP...',
+                                              'kirim_ulang_otp_registrasi',username)
+                style = 'success' if ok else 'error'
+                continue
+            if choice!='verifikasi':
+                continue
+            fields = await view.form('MASUKKAN KODE OTP', [Field('kode','Kode OTP (6 digit)',secret=True)],
+                                     subtitle='Verifikasi email pendaftaran',
+                                     hint='Pakai OTP terbaru. Jangan bagikan kode.',
+                                     submit_label='Verifikasi')
+            if fields is None:
+                notice,style='Verifikasi dibatalkan. Pilih tindakan.','warning'
+                continue
+            kode = fields['kode'].strip()
+            if not kode:
+                notice,style='Kode OTP wajib diisi.','error'
+                continue
+            ok,notice = await self._request(view,'Memverifikasi kode OTP...',
+                                           'verifikasi_otp_registrasi',username,kode)
+            if ok:
+                await view.message('VERIFIKASI BERHASIL',
+                    'Email terverifikasi. Silakan tunggu persetujuan Admin.',
+                    kind='success')
+                return
+            style='error'
 
-        session.set_user(hasil)
+    async def _proses_password_sementara(self, view, user, password_lama):
+        notice='Password direset Admin. Ganti sekarang.'
+        style='warning'
+        for _ in range(3):
+            data=await view.form('GANTI PASSWORD WAJIB', [
+                Field('baru','Password baru',secret=True),
+                Field('confirm','Ulangi password baru',secret=True),
+            ],subtitle='8–64 karakter, min. 1 huruf dan 1 angka',
+            notice=notice,notice_style=style,submit_label='Simpan')
+            if data is None:
+                await view.message('LOGIN DIBATALKAN','Password sementara masih berlaku.')
+                return None
+            baru=data['baru']
+            if baru!=data['confirm']:
+                notice,style='Konfirmasi password tidak cocok.','error'
+                continue
+            if baru==password_lama:
+                notice,style='Password baru harus berbeda dari password sementara.','error'
+                continue
+            ok,pesan=await self._request(view,'Menyimpan password baru...',
+                                         'ganti_password',user['id'],password_lama,baru)
+            if not ok:
+                notice,style=pesan,'error'
+                continue
+            try:
+                terbaru=await view.busy('Memastikan perubahan password...',self.user_lookup,user['id'])
+            except Exception:
+                terbaru=None
+            if not terbaru or terbaru.get('must_change_password'):
+                await view.message('PASSWORD BELUM TERKONFIRMASI',
+                    'Silakan coba login kembali.',kind='error')
+                return None
+            await view.message('PASSWORD BERHASIL DIGANTI','Password baru telah tersimpan.',kind='success',auto=True)
+            return terbaru
+        await view.message('BATAS PERCOBAAN','Silakan login kembali.',kind='error')
+        return None
 
-        nama = hasil["nama_lengkap"]
-        status = hasil["status"]
-        role = hasil["role"]
+    async def menu_login(self, view):
+        username=''
+        notice=''
+        while True:
+            data=await view.form('LOGIN PENGGUNA',[
+                Field('username','Username',default=username),
+                Field('password','Password',secret=True),
+            ],subtitle='Masuk menggunakan akun SIBIMA',notice=notice,submit_label='Masuk')
+            if data is None or not data['username'] or not data['password']:
+                return None
+            username=data['username']
+            password=data['password']
+            ok,user=await self._request(view,'Memverifikasi kredensial...','login',username,password)
+            if not ok:
+                # Service menentukan status dan akses. Tidak menambah rute OTP/login baru.
+                notice=str(user)
+                password=None
+                data.clear()
+                continue
+            if user.get('must_change_password'):
+                user=await self._proses_password_sementara(view,user,password)
+                if user is None:
+                    return None
+            password=None
+            data.clear()
+            role=user.get('role')
+            if role not in ('admin','tutor','siswa'):
+                await view.message('AKSES DITOLAK','Role akun tidak dikenali.',kind='error')
+                return None
+            # Siswa menunggu tetap mengikuti onboarding dashboard lama. Tutor menunggu
+            # ditolak oleh service. Jangan mengubah status akun dari presentasi.
+            label='Membuka halaman akun...' if user.get('status')!='aktif' else f'Membuka dashboard {role.capitalize()}...'
+            await view.message('AUTENTIKASI BERHASIL',
+                f"Selamat datang, {user.get('nama_lengkap') or username}\n"
+                f"Role: {role.upper()}  |  Status: {user.get('status','—')}\n\n{label}",
+                kind='success',auto=True)
+            return user
 
-        sukses(
-            f"Login berhasil! Selamat datang, {nama} "
-            f"(Status: {status})."
-        )
+    async def menu_register(self,view):
+        """Wizard hanya memisahkan tampilan; tetap 1 panggilan register."""
+        role=None
+        account={'username':'','email':'','nama_lengkap':''}
+        step=1
+        notice=''
+        password=None
+        while True:
+            if step==1:
+                role=await view.menu('PILIH JENIS AKUN',ROLE_CHOICES,
+                                     subtitle='Langkah 1/4 · Pilih peran akun')
+                if role in (None,'back'):
+                    return
+                step=2
+            elif step==2:
+                values=await view.form('INFORMASI AKUN',[
+                    Field('nama_lengkap','Nama lengkap',account['nama_lengkap']),
+                    Field('username','Username',account['username']),
+                    Field('email','Email aktif',account['email']),
+                ],step='Langkah 2/4',subtitle='Informasi pengguna',
+                    hint='Username 4–30: huruf, angka, atau underscore (_).',notice=notice)
+                if values is None:
+                    step=1
+                    notice=''
+                    continue
+                account.update(values)
+                if not all(account.values()):
+                    notice='Semua kolom wajib diisi.'
+                    continue
+                notice=''
+                step=3
+            elif step==3:
+                values=await view.form('KEAMANAN AKUN',[
+                    Field('password','Password',secret=True),
+                    Field('confirm','Konfirmasi password',secret=True),
+                ],step='Langkah 3/4',subtitle='Keamanan',
+                    hint='8–64 karakter, min. 1 huruf dan 1 angka',notice=notice)
+                if values is None:
+                    step=2
+                    notice=''
+                    continue
+                if values['password']!=values['confirm']:
+                    notice='Konfirmasi password tidak cocok.'
+                    continue
+                if not values['password']:
+                    notice='Password wajib diisi.'
+                    continue
+                password=values['password']
+                values.clear()
+                notice=''
+                step=4
+            else:
+                action=await view.menu('TINJAU PENDAFTARAN',(
+                    ('daftar','Daftar'),('back','Kembali'),
+                ),subtitle='Langkah 4/4 · Periksa data akun',
+                    notice='Verifikasi email & persetujuan Admin.',
+                    details=(f"Role: {role.capitalize()}",
+                             f"Nama: {account['nama_lengkap']}",
+                             f"Username: {account['username']}",
+                             f"Email: {account['email']}"))
+                if action!='daftar':
+                    password=None
+                    step=3
+                    continue
+                payload={k:v.strip() for k,v in account.items()}
+                payload['password']=password
+                ok,pesan=await self._request(view,'Memproses pendaftaran...','register',role,payload)
+                payload.pop('password',None)
+                password=None
+                if ok:
+                    await self.menu_verifikasi_registrasi(view,payload['username'],str(pesan))
+                    return
+                await view.message('REGISTRASI GAGAL',pesan,kind='error')
+                step=2
 
-        if role == "admin":
-            from app.ui import menu_admin
-            menu_admin.jalankan()
+    async def menu_lupa_password(self,view):
+        data=await view.form('PULIHKAN AKUN',[Field('email','Email terdaftar')],
+            subtitle='Pemulihan password',
+            hint='OTP dikirim jika email memenuhi syarat.',submit_label='Kirim OTP')
+        if data is None:
+            return
+        email=data['email']
+        ok,pesan=await self._request(view,'Memproses permintaan OTP...',
+                                     'minta_otp_reset_password',email)
+        if not ok:
+            await view.message('PERMINTAAN GAGAL',pesan,kind='error')
+            return
+        # Pesan netral dari service: tidak mengungkap apakah email terdaftar.
+        otp=await view.form('KODE PEMULIHAN',[Field('kode','Kode OTP (6 angka)',secret=True)],
+                            subtitle='Periksa Inbox/Spam. Jangan bagikan OTP.',
+                            notice='OTP dikirim jika email memenuhi syarat.',notice_style='muted')
+        if otp is None:
+            return
+        values=await view.form('PASSWORD BARU',[
+            Field('baru','Password baru',secret=True),
+            Field('confirm','Ulangi password baru',secret=True),
+        ],subtitle='8–64 karakter, min. 1 huruf dan 1 angka',
+            hint='OTP diverifikasi saat password disimpan.',submit_label='Simpan')
+        if values is None:
+            return
+        if values['baru']!=values['confirm']:
+            await view.message('KONFIRMASI TIDAK COCOK','Silakan ulangi proses.',kind='error')
+            return
+        ok,pesan=await self._request(view,'Memverifikasi dan menyimpan password...',
+                                     'reset_password',email,otp['kode'].strip(),values['baru'])
+        otp.clear()
+        values.clear()
+        await view.message('PASSWORD BERHASIL DIPERBARUI' if ok else 'PEMULIHAN GAGAL',
+                           pesan,kind='success' if ok else 'error')
 
-        elif role == "siswa":
-            from app.ui import menu_siswa
-            menu_siswa.jalankan()
-
-        elif role == "tutor":
-            from app.ui import menu_tutor
-            menu_tutor.jalankan()
-
-        else:
-            session.logout()
-            gagal("Role akun tidak dikenali.")
-    else:
-        gagal(f"Login Gagal: {hasil}")
-
-
-
-def menu_register():
-    bersihkan_layar()
-    tampilkan_header("Register")
-    
-    info("Silakan lengkapi data pendaftaran berikut.")
-    print()
-    
-    role = questionary.select(
-        "Mendaftar sebagai:",
-        choices=[
-            Choice("Siswa", value="siswa"),
-            Choice("Tutor", value="tutor")
-        ],
-        style=tema_sibima,
-        qmark="🎯",
-        pointer="▶"
-    ).ask()
-    
-    if not role: return
-
-    username = questionary.text("Username (tanpa spasi, min 4 karakter):", style=tema_sibima, qmark="👤").ask()
-    email = questionary.text("Email Aktif:", style=tema_sibima, qmark="📧").ask()
-    nama_lengkap = questionary.text("Nama Lengkap:", style=tema_sibima, qmark="📝").ask()
-    password = questionary.password("Password:", style=tema_sibima, qmark="🔑").ask()
-    konfirmasi = questionary.password("Konfirmasi Password:", style=tema_sibima, qmark="🔑").ask()
-
-    # Validasi awal sebelum membebani database
-    if password != konfirmasi:
-        gagal("Konfirmasi password tidak cocok dengan password utama.")
-        return
-        
-    if not all([username, email, nama_lengkap, password]):
-        gagal("Semua kolom wajib diisi.")
-        return
-
-    data_register = {
-        "username": username.strip(),
-        "email": email.strip(),
-        "nama_lengkap": nama_lengkap.strip(),
-        "password": password
-    }
-
-    info("Memproses pendaftaran ke database...")
-    berhasil, pesan = auth_service.register(role, data_register)
-
-    if berhasil:
-        sukses(pesan)
-        menu_verifikasi_registrasi(data_register["username"])
-    else:
-        gagal(f"Registrasi Gagal: {pesan}")
-
-def menu_lupa_password():
-    """Pemulihan akun via email + OTP; tanpa login atau password lama."""
-    bersihkan_layar()
-    tampilkan_header("Lupa Password")
-    console.print(Panel(
-        "Masukkan email terdaftar. Jika memenuhi syarat, kode OTP akan "
-        "dikirim ke email tersebut. Jangan bagikan OTP kepada siapa pun.",
-        title="[bold cyan]PEMULIHAN PASSWORD[/bold cyan]",
-        border_style="cyan", padding=(1, 2),
-    ))
-    email = questionary.text(
-        "Email terdaftar:", style=tema_sibima, qmark="📧"
-    ).ask()
-    if email is None:
-        return
-
-    berhasil, pesan = auth_service.minta_otp_reset_password(email)
-    if not berhasil:
-        gagal(pesan)
-        return
-
-    bersihkan_layar()
-    tampilkan_header("Lupa Password")
-    info(pesan)
-    console.print(
-        "[dim]Jika belum menerima OTP, periksa Spam. "
-        "Untuk meminta kode baru, kembali ke menu Lupa Kata Sandi.[/dim]"
-    )
-    kode = questionary.text(
-        "Kode OTP (6 angka):", style=tema_sibima, qmark="🔐"
-    ).ask()
-    if kode is None:
-        return
-
-    baru = questionary.password(
-        "Password baru (8-64 karakter; huruf dan angka):",
-        style=tema_sibima, qmark="🔑",
-    ).ask()
-    if baru is None:
-        return
-    konfirmasi = questionary.password(
-        "Ulangi password baru:", style=tema_sibima, qmark="🔁"
-    ).ask()
-    if konfirmasi is None:
-        return
-    if baru != konfirmasi:
-        gagal("Konfirmasi password tidak sama. Silakan ulangi proses.")
-        return
-
-    berhasil, pesan = auth_service.reset_password(email, kode.strip(), baru)
-    if berhasil:
-        sukses(pesan)
-    else:
-        gagal(pesan)
+    async def run(self,view,*,opening=True):
+        if opening:
+            await view.opening()
+        while True:
+            action=await view.menu('MENU UTAMA',MAIN_CHOICES,
+                                  subtitle='Sistem Informasi Bimbingan Belajar')
+            if action in (None,'Keluar'):
+                choice=await view.menu('KELUAR DARI APLIKASI',(
+                    ('back','Kembali'),('exit','Keluar'),
+                ),subtitle='Akhiri sesi SIBIMA-AI?')
+                if choice=='exit':
+                    await view.message('SAMPAI JUMPA','Terima kasih telah menggunakan SIBIMA-AI.',kind='success',auto=True)
+                    return None
+            elif action=='Login':
+                user=await self.menu_login(view)
+                if user is not None:
+                    return user
+            elif action=='Register':
+                await self.menu_register(view)
+            elif action=='Lupa Password':
+                await self.menu_lupa_password(view)
 
 
 def jalankan():
-    while True:
-        bersihkan_layar()
-        tampilkan_header("Utama")
-        
-        pilihan = questionary.select(
-            "Tentukan rute akses Anda:",
-            choices=[
-                Choice(title=" 🔓  Masuk ke Akun (Login)", value="Login"),
-                Choice(title=" 📝  Pendaftaran Baru (Register)", value="Register"),
-                Choice(title=" 🔑  Lupa Kata Sandi", value="Lupa Password"),
-                Separator(" ────────────────────────── "),
-                Choice(title=" 🚪  Keluar dari Aplikasi", value="Keluar")
-            ],
-            style=tema_sibima,
-            qmark="⚡",
-            pointer="▶",
-            instruction=" (Gunakan panah ↑/↓ lalu tekan Enter)"
-        ).ask()
-        
-        if pilihan is None or pilihan == "Keluar":
-            info("Sampai jumpa di SIBIMA!")
-            break
-            
-        elif pilihan == "Login":
-            menu_login()
-        elif pilihan == "Register":
-            menu_register()
-        elif pilihan == "Lupa Password":
-            menu_lupa_password()
-        else:
-            peringatan(f"Menu '{pilihan}' tidak dikenali.")
-        
-        console.print("\n[dim]Tekan Enter untuk kembali...[/dim]")
-        input()
+    from app import session
+    from app.services import auth_service
+    from app.repositories import user_repo
 
-if __name__ == "__main__":
+    controller=AuthController(auth_service,user_repo.cari_by_id)
+    opening=True
+    while True:
+        user=AuthWorkspace().run(lambda view:controller.run(view,opening=opening))
+        opening=False
+        if user is None:
+            return
+        session.set_user(user)
+        role=user['role']
+        # The old dashboards run only after Prompt Toolkit has restored the normal
+        # screen; none of the Admin/Tutor/Siswa/AI menu code is changed by UI-001.
+        if role=='admin':
+            from app.ui import menu_admin as dashboard
+        elif role=='tutor':
+            from app.ui import menu_tutor as dashboard
+        else:
+            from app.ui import menu_siswa as dashboard
+        dashboard.jalankan()
+
+
+if __name__=='__main__':
     jalankan()

@@ -14,21 +14,7 @@ from rich import box
 from app.ui.console import console
 
 
-# Seluruh kode modul Admin lama wajib tetap dapat diakses.
-KELOMPOK_MENU = (
-    ("Prioritas", (("Pusat Konfirmasi", "konfirmasi"),
-                   ("Pendaftaran", "pendaftaran"),
-                   ("Pembayaran", "pembayaran"))),
-    ("Data Pengguna", (("Manajemen Akun", "akun"),
-                       ("Data Siswa", "siswa"),
-                       ("Data Tutor", "tutor"))),
-    ("Akademik", (("Program dan Ruang", "program"),
-                  ("Jadwal", "jadwal"))),
-    ("Laporan & Komunikasi", (("Laporan", "laporan"),
-                             ("Komunikasi", "pengumuman"),
-                             ("Log Aktivitas", "log"),
-                             ("SIBIMA-AI", "ai"))),
-)
+from app.ui.admin_navigation import KELOMPOK_MENU
 
 
 def _angka(data, key):

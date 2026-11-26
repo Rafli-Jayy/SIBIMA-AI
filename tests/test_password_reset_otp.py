@@ -111,13 +111,45 @@ def test_email_template_has_separate_reset_context():
     assert 'Jangan bagikan kode' in reset_html
 
 
-def test_cli_has_reset_menu_implementation():
-    root = Path(__file__).resolve().parents[1]
-    content = (root / 'app/ui/menu_auth.py').read_text(encoding='utf-8')
-    assert 'def menu_lupa_password():' in content
-    assert 'auth_service.minta_otp_reset_password(email)' in content
-    assert 'auth_service.reset_password(email, kode.strip(), baru)' in content
-    assert 'elif pilihan == "Lupa Password":' in content
+def test_cli_has_reset_menu_implementation(monkeypatch):
+    """Check the real UI controller route, not a specific legacy source spelling."""
+    import asyncio
+    from app.ui.menu_auth import AuthController
+
+    calls = []
+    monkeypatch.setattr(auth_service, 'minta_otp_reset_password',
+                        lambda email: calls.append(('request', email)) or (True, 'issued'))
+    monkeypatch.setattr(auth_service, 'reset_password',
+                        lambda email, code, password: calls.append(('reset', email, code, password)) or (True, 'done'))
+
+    class View:
+        def __init__(self):
+            self.choices = iter(('Lupa Password', 'Keluar', 'exit'))
+            self.forms = iter((
+                {'email': EMAIL}, {'kode': '123456'},
+                {'baru': 'PasswordBaru123', 'confirm': 'PasswordBaru123'},
+            ))
+
+        async def opening(self):
+            raise AssertionError('Opening must be skipped on return.')
+
+        async def menu(self, title, choices, **kwargs):
+            selected = next(self.choices)
+            assert selected in [key for key, _ in choices]
+            return selected
+
+        async def form(self, title, fields, **kwargs):
+            return next(self.forms)
+
+        async def busy(self, title, method, *args):
+            return method(*args)
+
+        async def message(self, *args, **kwargs):
+            pass
+
+    result = asyncio.run(AuthController(auth_service, lambda _: None).run(View(), opening=False))
+    assert result is None
+    assert calls == [('request', EMAIL), ('reset', EMAIL, '123456', 'PasswordBaru123')]
 
 
 class MemoryCursor:

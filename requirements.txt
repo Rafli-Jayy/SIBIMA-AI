@@ -14,6 +14,7 @@ email-validator>=2.0,<3
 # Antarmuka terminal
 rich>=13.7,<16
 questionary>=2.0,<3
+prompt-toolkit>=3.0.36,<4
 
 # PDF dan Excel
 reportlab>=4.0,<5
