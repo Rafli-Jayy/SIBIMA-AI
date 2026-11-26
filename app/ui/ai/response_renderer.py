@@ -34,14 +34,13 @@ def _within_workspace(renderable, console_width: int):
 def render_header(role: str, console_width: int = 100, online: bool = False):
     role_text = {"siswa": "Siswa", "tutor": "Tutor", "admin": "Admin"}.get(role, "Pengguna")
     width = fit_width(console_width)
-    header = Table.grid(expand=False, padding=0)
-    header.add_column(width=max(12, width // 2), overflow="ellipsis")
-    header.add_column(width=max(1, width - max(12, width // 2)), justify="right", overflow="ellipsis")
-    a = Text("◈  SIBIMA AI", style="bold white")
     status = ("Gemini · Online" if online else ("Pratinjau UI (offline)" if width >= 80 else "Offline"))
-    b = Text(f"{role_text}  ·  {status}", style="dim")
-    header.add_row(a, b)
-    return _within_workspace(header, console_width)
+    a = Text("◈  SIBIMA AI", style="bold #67d4e8", justify="center")
+    b = Text(f"{role_text}  ·  {status}", style="dim", justify="center")
+    # One blank terminal row above the header in chat and navigation.
+    # Divider and status share one centered Rich workspace.
+    return Group(Text(""), _within_workspace(Group(a,b,
+                 Text("─"*width,style="grey35")),console_width))
 
 
 def render_table(data: Dict[str, Any], narrow: bool = False):

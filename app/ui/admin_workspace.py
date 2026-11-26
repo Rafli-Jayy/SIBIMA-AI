@@ -189,6 +189,9 @@ def load_snapshot():
     from app.repositories import admin_dashboard_repo
     try:
         summary = admin_dashboard_repo.ringkasan_admin()
+        if isinstance(summary,dict) and 'tagihan_tunggakan' in summary:
+            # UI-003C: match the billing list's database-date definition.
+            summary={**summary,'tagihan_terlambat':summary['tagihan_tunggakan']}
     except Exception:
         summary = None
     try:
@@ -211,11 +214,12 @@ def _metric_tone(snapshot,key,changed):
         return 'muted'
     if key in changed:
         return 'success'
-    if key in ('tagihan_terlambat','transaksi_gagal_bulan_ini'):
+    if key in ('tagihan_terlambat','transaksi_gagal_bulan_ini','locked'):
         return 'error' if snapshot.value(key)!='0' else 'muted'
     if key=='transaksi_lunas_bulan_ini':
         return 'success'
-    if key in dict(ATTENTION_KEYS) or key.startswith('konfirmasi_') or key=='tagihan_belum_lunas':
+    if (key in dict(ATTENTION_KEYS) or key.startswith('konfirmasi_') or key.endswith('_wait')
+            or key in ('tagihan_belum_lunas','belum_verifikasi','menunggu_konfirmasi','failed','must_change')):
         return 'warning' if snapshot.value(key)!='0' else 'muted'
     return 'number'
 
@@ -472,8 +476,12 @@ def fragments(rows):
 class AdminDashboardWorkspace:
     """Pinned menu + pageable information; no writes and no action dispatch."""
     def __init__(self,nama,*,load=load_snapshot,previous=None,input=None,output=None,
-                 motion_enabled=None,initial_group=None,initial_index=0):
+                 motion_enabled=None,initial_group=None,initial_index=0,integrated_priority=False,integrated_data=False,integrated_academic=False,integrated_reporting=False):
         self.nama=clean(nama) or 'Admin'
+        self.integrated_priority=integrated_priority
+        self.integrated_data=integrated_data
+        self.integrated_academic=integrated_academic
+        self.integrated_reporting=integrated_reporting
         self.load: Callable[[], Snapshot]=load
         self.previous=previous
         self.snapshot=None
@@ -522,6 +530,18 @@ class AdminDashboardWorkspace:
         def enter(event):
             key=self.choices[self.index][0]
             if self.group is None and type(key) is int:
+                if key==0 and self.integrated_priority:
+                    event.app.exit(result='prioritas')
+                    return
+                if key==1 and self.integrated_data:
+                    event.app.exit(result='data_pengguna')
+                    return
+                if key==2 and self.integrated_academic:
+                    event.app.exit(result='akademik')
+                    return
+                if key==3 and self.integrated_reporting:
+                    event.app.exit(result='laporan_komunikasi')
+                    return
                 self.home_index=self.index
                 self.group=key
                 self.index=0
@@ -692,19 +712,26 @@ class AdminDashboardWorkspace:
 class AdminDashboardNavigator:
     """Remember previous real counts between returns from legacy modules."""
 
-    def __init__(self, *, load=load_snapshot):
+    def __init__(self, *, load=load_snapshot, integrated_priority=False, integrated_data=False, integrated_academic=False,integrated_reporting=False):
         self.load=load
+        self.integrated_priority=integrated_priority
+        self.integrated_data=integrated_data
+        self.integrated_academic=integrated_academic
+        self.integrated_reporting=integrated_reporting
         self.previous=None
         self.return_group=None
         self.return_index=0
 
     def choose(self,nama):
         workspace=AdminDashboardWorkspace(nama,load=self.load,previous=self.previous,
-                                          initial_group=self.return_group,initial_index=self.return_index)
+                                          initial_group=self.return_group,initial_index=self.return_index,
+                                          integrated_priority=self.integrated_priority,integrated_data=self.integrated_data,
+                                          integrated_academic=self.integrated_academic,integrated_reporting=self.integrated_reporting)
         result=workspace.run()
         # Returning from a Prioritas module restores its immediate parent.
         self.return_group=0 if result in ('konfirmasi','pendaftaran','pembayaran') else None
-        self.return_index={'konfirmasi':0,'pendaftaran':1,'pembayaran':2}.get(result,0)
+        self.return_index={'konfirmasi':0,'pendaftaran':1,'pembayaran':2,
+                           'prioritas':0,'data_pengguna':1,'akademik':2,'laporan_komunikasi':3}.get(result,0)
         if workspace.snapshot is not None and workspace.snapshot.summary is not None:
             self.previous=workspace.snapshot
         return result

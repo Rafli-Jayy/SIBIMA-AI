@@ -246,7 +246,7 @@ class EnrollmentController:
                 await self.move_flow(view)
             elif action=='cancel':
                 await self.cancel_flow(view)
-            focus=action
+            focus=(getattr(view,'refresh_focus',None) or action) if action=='refresh' else action
 
     async def _choose_filters(self,view,status,program_id):
         options=[('all','Semua status')]+[(key,label) for key,label in STATUS_LABELS.items()]+[('back','Kembali')]
@@ -406,14 +406,12 @@ class EnrollmentController:
             await self._write(view,'Memproses pembatalan...',self.cancel,item['enrollment_id'],reason)
 
 
-def menu_pendaftaran_admin():
+def build_enrollment_controller():
+    """Construct the controller without opening another terminal application."""
     from app import session
-    if not session.punya_role('admin'):
-        return
     from app.repositories import admin_dashboard_repo,enrollment_repo,program_repo
     from app.services import admin_enrollment_service
-    user=session.get_user() or {}
-    controller=EnrollmentController(
+    return EnrollmentController(
         summary=admin_dashboard_repo.ringkasan_admin,
         list_enrollments=admin_enrollment_service.daftar_pendaftaran,
         detail=admin_enrollment_service.detail_pendaftaran,
@@ -422,4 +420,12 @@ def menu_pendaftaran_admin():
         move=admin_enrollment_service.pindahkan_pendaftaran,
         cancel=admin_enrollment_service.batalkan_pendaftaran,
         is_admin=lambda:session.punya_role('admin'))
-    ConfirmationWorkspace(user.get('nama_lengkap') or user.get('username') or 'Admin').run(controller.run)
+
+
+def menu_pendaftaran_admin():
+    from app import session
+    if not session.punya_role('admin'):
+        return
+    user=session.get_user() or {}
+    ConfirmationWorkspace(user.get('nama_lengkap') or user.get('username') or 'Admin').run(
+        build_enrollment_controller().run)

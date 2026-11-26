@@ -31,10 +31,8 @@ class ChatScreen:
                                erase_when_done=(self.view_mode == "scroll")).ask()
 
     def _choice(self, title: str, choices, default=None):
-        import questionary
-        return questionary.select(title, choices=choices, default=default,
-                                  qmark=prompt_prefix(self.console.width),
-                                  pointer="›", style=question_style()).ask()
+        from .navigation import choose_navigation
+        return choose_navigation(title, choices, default)
 
     def _menu(self) -> bool:
         self.console.clear()

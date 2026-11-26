@@ -8,7 +8,7 @@ from prompt_toolkit.layout.containers import WindowAlign
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.utils import get_cwidth
 
-from .auth_workspace import AuthWorkspace, Field
+from .auth_workspace import AuthWorkspace, Field, bounded_lines
 from .admin_workspace import (
     CONTENT_WIDTH, MENU_WIDTH, CARD_GAP, Snapshot, band, clean, clip, pad,
     dashboard_card, line, fragments, menu_rows, priority_pages, changed_metrics,
@@ -60,6 +60,37 @@ def wrap(value,width):
         rows.append(rest[:end])
         rest=rest[end:].lstrip()
     return rows or ['—']
+
+
+def empty_state_rows(width,budget,caption,message,*,filter_action=False):
+    """Top-aligned, centered card shared by every empty Admin record table.
+
+    Keep the contextual message readable and the existing keyboard actions
+    available. An empty successful result is not a service error.
+    """
+    budget=max(1,budget)
+    cw=min(64,width)
+    inner=max(1,cw-4)
+    def centered(text,tone='muted'):
+        return [line(t,cw-2,tone,'center')
+                for t in bounded_lines(text,inner,2).splitlines()]
+    body=centered(message,'title')+centered('0 data · '+caption)
+    hint='Ubah filter atau muat ulang.' if filter_action else 'Muat ulang untuk memeriksa data terbaru.'
+    card=dashboard_card('BELUM ADA DATA',[[],*body,[],*centered(hint)],cw)
+    # At short heights preserve the message before optional details.
+    if len(card)>budget:
+        card=dashboard_card('BELUM ADA DATA',body,cw)
+    if len(card)>budget:
+        card=dashboard_card('BELUM ADA DATA',centered(message,'title')[:max(0,budget-3)],cw)
+    if len(card)>budget or cw<8 or budget<4:
+        card=[line(t,width,'title','center')
+              for t in bounded_lines(message,width,min(2,budget)).splitlines()][:budget]
+        return card
+    left=(width-cw)//2
+    right=width-cw-left
+    rows=[[('', ' '*left),*row,('', ' '*right)] for row in card]
+    # A single breathing line under the section heading when space permits.
+    return ([[]] if len(rows)<budget else [])+rows
 
 
 def field_rows(fields,width,*,full=False):
@@ -189,11 +220,18 @@ class ConfirmationWorkspace(AuthWorkspace):
         self.table_empty=""
         self.table_renderer=None
         self.page_renderer=None
+        self.refresh_focus=None
         super().__init__(**kwargs)
 
-        @self.app.key_bindings.add('r',filter=Condition(lambda: self.table_active and self.mode=='menu'))
-        @self.app.key_bindings.add('R',filter=Condition(lambda: self.table_active and self.mode=='menu'))
+        # Refresh only on list pages or dashboards with an explicit refresh action.
+        # Never trigger from a form, decision confirmation, or result page.
+        refreshable=Condition(lambda: self.mode=='menu' and
+            (self.table_active or (self.page_active and any(k=='refresh' for k,_ in self.choices))))
+        @self.app.key_bindings.add('r',filter=refreshable)
+        @self.app.key_bindings.add('R',filter=refreshable)
         def refresh(event):
+            if self.page_active and not self.table_active:
+                self.refresh_focus=self.choices[self.index][0]
             self.finish('refresh')
 
         @self.app.key_bindings.add('f',filter=Condition(lambda: self.table_active and self.table_filter and self.mode=='menu'))
@@ -235,6 +273,12 @@ class ConfirmationWorkspace(AuthWorkspace):
 
     def _footer(self):
         if self.mode=='menu' and self.table_active:
+            if not self.table_data:
+                hint=('F Filter · R Muat ulang · Enter/Esc Kembali' if self.table_filter
+                      else 'R Muat ulang · Enter/Esc Kembali')
+                if get_cwidth(hint)>self._admin_width():
+                    hint='F · R Muat ulang · Esc' if self.table_filter else 'R Muat ulang · Esc'
+                return [('class:muted',clip(hint,self._admin_width()))]
             hint=('↑ ↓ Pilih · Enter · PgUp/PgDn · F Filter · R Muat ulang · Esc Kembali' if self.table_filter
                   else '↑ ↓ Pilih · Enter · PgUp/PgDn · R Muat ulang · Esc Kembali')
             if get_cwidth(hint)>self._admin_width():
@@ -242,7 +286,8 @@ class ConfirmationWorkspace(AuthWorkspace):
             return [('class:muted',clip(hint,self._admin_width()))]
         if self.mode=='menu' and self.page_active:
             prefix='PgUp/PgDn Baca · ' if len(self._page_rows())>1 else ''
-            return [('class:muted',clip(prefix+'↑ ↓ Pilih · Enter · Esc Kembali',self._admin_width()))]
+            refresh=' · R Muat ulang' if any(k=='refresh' for k,_ in self.choices) else ''
+            return [('class:muted',clip(prefix+'↑ ↓ Pilih · Enter'+refresh+' · Esc Kembali',self._admin_width()))]
         return super()._footer()
 
     def _remaining(self):
@@ -280,6 +325,7 @@ class ConfirmationWorkspace(AuthWorkspace):
         return fragments(rows[start:start+height])
 
     async def page(self,title,choices,renderer,*,default=None):
+        self.refresh_focus=None
         self.page_index=0
         self.page_renderer=renderer
         self.table_active=False
@@ -306,11 +352,8 @@ class ConfirmationWorkspace(AuthWorkspace):
     def _table_rows(self):
         width=self._admin_width()
         if not self.table_data:
-            return ([line('0 data · '+self.table_caption,width,'muted','center'),
-                    line(self.table_empty,width,'success','center'),
-                    line('F Filter · R Muat ulang · Esc Kembali' if self.table_filter else
-                         'R Muat ulang · Esc Kembali',width,'muted','center')][:self._remaining()]
-                    if self._remaining()>=2 else [line('Data kosong · Esc',width,'success','center')])
+            return empty_state_rows(width,self._remaining(),self.table_caption,
+                                    self.table_empty,filter_action=self.table_filter)
         n=len(self.table_data)
         capacity=self._table_capacity()
         start=max(0,min(self.index-capacity//2,n-capacity))
@@ -352,7 +395,7 @@ class ConfirmationWorkspace(AuthWorkspace):
         return await self.record_table('ANTREAN KONFIRMASI '+('AKUN' if kind=='akun' else 'PENDAFTARAN'),
             items,key='id' if kind=='akun' else 'enrollment_id',
             renderer=lambda w,item=None,selected=False:table_row(kind,w,item,selected),
-            caption='Urutan terlama',empty='Tidak ada antrean menunggu.')
+            caption='Urutan terlama',empty='Tidak ada akun menunggu konfirmasi.' if kind=='akun' else 'Tidak ada pendaftaran menunggu konfirmasi.')
 
     async def result(self,title,message,kind='info'):
         """Two-line notification + optional full service result, no lost warning."""
@@ -395,6 +438,7 @@ class ConfirmationController:
 
     async def run(self,view):
         previous=None
+        focus='akun'
         while self.is_admin():
             try:
                 snapshot=Snapshot(await view.busy('Memuat ringkasan...',self.summary),None)
@@ -407,11 +451,12 @@ class ConfirmationController:
                 ('akun','Konfirmasi Akun ('+snapshot.value('konfirmasi_akun')+')'),
                 ('program','Konfirmasi Pendaftaran ('+snapshot.value('konfirmasi_pendaftaran')+')'),
                 ('refresh','Muat ulang'),('back','Kembali ke Prioritas')],
-                lambda w,b:priority_pages(snapshot,w,b,changed,confirmation=True))
+                lambda w,b:priority_pages(snapshot,w,b,changed,confirmation=True),default=focus)
             if action in (None,'back'):
                 return
             if action in ('akun','program'):
                 await self.queue(view,action)
+            focus=(getattr(view,'refresh_focus',None) or action) if action=='refresh' else action
 
     async def queue(self,view,kind):
         loader=self.accounts if kind=='akun' else self.enrollments
@@ -530,15 +575,12 @@ class ConfirmationController:
             return
 
 
-def menu_konfirmasi():
-    """Entry point used by menu_admin; session and service checks stay intact."""
+def build_confirmation_controller():
+    """Construct with existing repositories/services, no screen or I/O."""
     from app import session
     from app.repositories import admin_dashboard_repo,user_repo,enrollment_repo,profile_repo
     from app.services import approval_service
-    if not session.punya_role('admin'):
-        return
-    user=session.get_user() or {}
-    controller=ConfirmationController(
+    return ConfirmationController(
         summary=admin_dashboard_repo.ringkasan_admin,
         accounts=lambda:user_repo.daftar_by_status('menunggu_konfirmasi'),
         enrollments=enrollment_repo.daftar_menunggu,
@@ -547,4 +589,13 @@ def menu_konfirmasi():
         approve_account=approval_service.setujui_akun,reject_account=approval_service.tolak_akun,
         approve_enrollment=approval_service.setujui_enrollment,reject_enrollment=approval_service.tolak_enrollment,
         is_admin=lambda:session.punya_role('admin'))
-    ConfirmationWorkspace(user.get('nama_lengkap') or user.get('username') or 'Admin').run(controller.run)
+
+
+def menu_konfirmasi():
+    """Standalone entry point, retained for compatibility."""
+    from app import session
+    if not session.punya_role('admin'):
+        return
+    user=session.get_user() or {}
+    ConfirmationWorkspace(user.get('nama_lengkap') or user.get('username') or 'Admin').run(
+        build_confirmation_controller().run)

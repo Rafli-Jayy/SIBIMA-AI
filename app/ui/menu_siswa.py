@@ -23,6 +23,7 @@ from app.ui.console import (
 )
 from app.utils.formatters import rupiah
 from app.ui.student_dashboard_grid import tampilkan_dashboard_siswa
+from app.ui.student_workspace import StudentDashboardNavigator, pilih_onboarding_siswa, tampilkan_status_akun
 
 
 GAYA_SIBIMA = Style([
@@ -473,18 +474,8 @@ def _jalankan_onboarding(pengguna):
                 return True
             if terbaru.get("status") in {"ditolak", "nonaktif"}:
                 alasan = terbaru.get("reject_reason") or "Tidak ada keterangan tambahan."
-                bersihkan_layar()
-                console.print(
-                    Panel(
-                        f"[bold red]Akun tidak dapat digunakan.[/bold red]\n\n{alasan}",
-                        title="STATUS AKUN",
-                        border_style="red",
-                        padding=(1, 3),
-                        expand=True,
-                    )
-                )
                 session.logout()
-                _jeda("Tekan Enter untuk kembali ke menu utama...")
+                tampilkan_status_akun(pengguna, alasan)
                 return False
             if not terbaru.get("email_verified"):
                 session.logout()
@@ -499,124 +490,20 @@ def _jalankan_onboarding(pengguna):
             _jeda()
             return False
 
-        menunggu = [item for item in enrollments if item.get("status") == "menunggu"]
-        aktif = [item for item in enrollments if item.get("status") == "aktif"]
-
-        bersihkan_layar()
-        console.print(
-            Panel(
-                "[bold cyan]S I B I M A[/bold cyan]\n"
-                "[bold white]PENYELESAIAN PENDAFTARAN SISWA[/bold white]",
-                border_style="cyan",
-                padding=(1, 4),
-                expand=True,
-            )
-        )
-        console.print(
-            Panel(
-                f"[bold white]Halo, [cyan]{pengguna.get('nama_lengkap', pengguna.get('username', 'Siswa'))}[/cyan]![/bold white]\n\n"
-                "Akunmu sedang menunggu persetujuan admin. Setelah akun disetujui, "
-                "NIS akan diterbitkan dan kamu dapat mendaftar program secara terpisah.",
-                title="STATUS AKUN",
-                border_style="bright_blue",
-                padding=(1, 2),
-                expand=True,
-            )
-        )
-
-        if menunggu:
-            _tabel_pendaftaran(menunggu, judul="Paket yang Menunggu Persetujuan")
-            console.print(
-                Panel(
-                    "[bold yellow]Pilihan paket sudah diterima.[/bold yellow]\n"
-                    "Pendaftaran program yang tercatat tetap menunggu keputusan program. "
-                    "Persetujuan akun dan penerbitan NIS tetap merupakan proses terpisah.\n"
-                    "Gunakan Muat Ulang Status untuk memeriksa keputusan admin.",
-                    border_style="yellow",
-                    padding=(1, 2),
-                    expand=True,
-                )
-            )
-            pilihan = questionary.select(
-                "Tindakan:",
-                choices=[
-                    Choice("↻  Muat ulang status", value="refresh"),
-                    Choice("🚪  Logout", value="logout"),
-                ],
-                style=GAYA_SIBIMA,
-                qmark="⚡",
-                pointer="▶",
-                instruction=" (Gunakan ↑/↓ lalu Enter)",
-            ).ask()
-            if pilihan is None or pilihan == "logout":
-                session.logout()
-                sukses("Logout siswa berhasil. Sesi telah ditutup.")
-                _jeda("Tekan Enter untuk kembali ke menu utama...")
-                return False
-            continue
-
-        if aktif:
-            # Kondisi tak normal: akun masih menunggu, tetapi ada enrollment aktif.
-            # Jangan izinkan memilih paket lagi; minta admin memeriksa konsistensi data.
-            _tabel_pendaftaran(aktif, judul="Pendaftaran Aktif yang Perlu Diperiksa")
-            peringatan(
-                "Akun masih berstatus menunggu, tetapi sudah memiliki pendaftaran aktif. "
-                "Hubungi admin untuk memeriksa konsistensi data."
-            )
-            pilihan = questionary.select(
-                "Tindakan:",
-                choices=[
-                    Choice("↻  Muat ulang status", value="refresh"),
-                    Choice("🚪  Logout", value="logout"),
-                ],
-                style=GAYA_SIBIMA,
-                qmark="⚡",
-                pointer="▶",
-            ).ask()
-            if pilihan is None or pilihan == "logout":
-                session.logout()
-                sukses("Logout siswa berhasil. Sesi telah ditutup.")
-                _jeda("Tekan Enter untuk kembali ke menu utama...")
-                return False
-            continue
-
-        console.print(
-            Panel(
-                "Belum ada pendaftaran program. Kamu dapat memilih program setelah "
-                "akun disetujui admin. NIS diterbitkan saat akun disetujui; "
-                "pendaftaran program dan tagihan diproses secara terpisah.",
-                title="MENUNGGU PERSETUJUAN AKUN",
-                border_style="cyan",
-                padding=(1, 3),
-                expand=True,
-            )
-        )
-        pilihan = questionary.select(
-            "Langkah berikutnya:",
-            choices=[
-                Choice("↻  Periksa status persetujuan akun", value="refresh"),
-                Choice("🚪  Logout", value="logout"),
-            ],
-            style=GAYA_SIBIMA,
-            qmark="⚡",
-            pointer="▶",
-            instruction=" (Gunakan ↑/↓ lalu Enter)",
-        ).ask()
-
+        # Account approval remains separate from enrollment approval. The new
+        # workspace only offers the same refresh/logout actions as before.
+        pilihan = pilih_onboarding_siswa(pengguna, enrollments)
         if pilihan is None or pilihan == "logout":
             session.logout()
             sukses("Logout siswa berhasil. Sesi telah ditutup.")
             _jeda("Tekan Enter untuk kembali ke menu utama...")
             return False
-
-        if pilihan == "refresh":
-            continue
-
-        # Akun belum aktif: hanya izinkan memeriksa status atau logout.
+        # Refresh loops back through user_repo.cari_by_id and the original gates.
 
 
 def jalankan():
     """Dashboard siswa; akun pending hanya dapat memeriksa status atau logout."""
+    navigator = StudentDashboardNavigator()
     while True:
         pengguna = _pengguna_siswa()
         if pengguna is None:
@@ -647,37 +534,9 @@ def jalankan():
             _jeda()
             return
 
-        _dashboard(pengguna, enrollments)
-        try:
-            engagement_service.sinkronisasi_notifikasi("siswa")
-            jumlah_belum_dibaca = engagement_service.jumlah_notifikasi_belum_dibaca("siswa")
-        except (psycopg.Error, PermissionError, ValueError):
-            jumlah_belum_dibaca = 0
-        label_notifikasi = (
-            f"🔔  Notifikasi ({jumlah_belum_dibaca} belum dibaca)"
-            if jumlah_belum_dibaca > 0 else "🔔  Notifikasi"
-        )
-        pilihan = questionary.select(
-            "Apa yang ingin kamu lakukan?",
-            choices=[
-                Choice("🎓  Katalog Program — cari dan daftar kelas", value="katalog"),
-                Choice("📚  Kelas Saya — pilih & lihat detail kelas", value="pendaftaran"),
-                Choice("🗓️  Jadwal Saya — hari ini & mingguan", value="jadwal"),
-                Choice("📝  Absensi", value="absensi"),
-                Choice("📊  Nilai dan Rapor", value="nilai"),
-                Choice("💳  Tagihan dan Pembayaran", value="pembayaran"),
-                Choice("📖  Catatan Materi", value="materi"),
-                Choice(label_notifikasi, value="notifikasi"),
-                Choice("🤖  Tanya AI (opsional)", value="ai"),
-                Choice("👤  Profil Saya", value="profil"),
-                Separator("────────────────────────"),
-                Choice("🚪  Logout", value="logout"),
-            ],
-            style=GAYA_SIBIMA,
-            qmark="⚡",
-            pointer="▶",
-            instruction=" (Gunakan ↑/↓ lalu Enter)",
-        ).ask()
+        pilihan = navigator.run(pengguna, enrollments)
+        if pilihan == "refresh":
+            continue
 
         if pilihan is None or pilihan == "logout":
             session.logout()

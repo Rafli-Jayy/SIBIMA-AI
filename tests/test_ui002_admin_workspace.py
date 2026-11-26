@@ -312,29 +312,34 @@ class KeyboardTests(unittest.TestCase):
         root=Path(__file__).resolve().parents[1]
         tree=ast.parse((root/'app/ui/menu_admin.py').read_text(encoding='utf8'))
         controller=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='jalankan')
-        route_codes=[code for _,items in KELOMPOK_MENU for _,code in items]
+        route_codes=['prioritas','data_pengguna','akademik','laporan_komunikasi','laporan_komunikasi']+[code for _,items in KELOMPOK_MENU for _,code in items]
         routes=Mock(side_effect=route_codes+['logout'])
         events=[]
         def action(code):
-            return lambda *a: events.append(code)
+            return lambda *a,**kw: events.append(code)
         session=SimpleNamespace(punya_role=lambda role:role=='admin',
                                 get_user=lambda:{'nama_lengkap':'Admin'},
                                 logout=action('logout'))
-        env=dict(AdminDashboardNavigator=lambda:SimpleNamespace(choose=routes),
+        nav_factory=Mock(return_value=SimpleNamespace(choose=routes,previous=Snapshot(SUMMARY,SCHEDULE)))
+        env=dict(AdminDashboardNavigator=nav_factory,
                  session=session,bersihkan_layar=lambda:None,sukses=lambda *a:None,
                  peringatan=lambda *a:None,MENU_ADMIN=[],
                  menu_konfirmasi=action('konfirmasi'),menu_program_ruang=action('program'),
                  menu_pendaftaran_admin=action('pendaftaran'),menu_jadwal_admin=action('jadwal'),
-                 menu_admin_data=SimpleNamespace(menu_manajemen_akun_admin=action('akun'),
+                 menu_admin_data=SimpleNamespace(menu_data_pengguna_admin=action('data_pengguna'),menu_manajemen_akun_admin=action('akun'),
                     menu_data_siswa_admin=action('siswa'),menu_data_tutor_admin=action('tutor')),
                  menu_pembayaran=SimpleNamespace(menu_pembayaran_admin=action('pembayaran')),
                  menu_admin_laporan=SimpleNamespace(menu_laporan_admin=action('laporan')),
                  menu_admin_komunikasi=SimpleNamespace(menu_pengumuman_admin=action('pengumuman'),
                     menu_log_aktivitas_admin=action('log')))
         exec(compile(ast.Module(body=[controller],type_ignores=[]),'<controller>','exec'),env)
-        with patch.dict(sys.modules,{'app.services.ai_service':SimpleNamespace(buka_ai=action('ai'))}):
+        with patch.dict(sys.modules,{'app.services.ai_service':SimpleNamespace(buka_ai=action('ai')),
+                                     'app.ui.admin_priority':SimpleNamespace(menu_prioritas_admin=action('prioritas')),
+                                     'app.ui.admin_academic':SimpleNamespace(menu_akademik_admin=action('akademik')),
+                                     'app.ui.admin_reporting':SimpleNamespace(menu_laporan_komunikasi_admin=Mock(side_effect=[None,'ai']))}):
             env['jalankan']()
-        self.assertEqual(events,route_codes+['logout'])
+        nav_factory.assert_called_once_with(integrated_priority=True, integrated_data=True, integrated_academic=True, integrated_reporting=True)
+        self.assertEqual(events,route_codes[:3]+['ai']+route_codes[5:]+['logout'])
         self.assertEqual(routes.call_count,len(route_codes)+1)
 
     def test_small_viewport_and_logout(self):

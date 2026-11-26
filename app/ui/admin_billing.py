@@ -293,7 +293,7 @@ class BillingController:
                 await self.browse_history(view)
             elif action in ('pdf','email'):
                 await self.receipt_flow(view,email=action=='email')
-            focus=action
+            focus=(getattr(view,'refresh_focus',None) or action) if action=='refresh' else action
 
     async def monthly(self,view):
         if not self.is_admin():
@@ -496,14 +496,12 @@ class BillingController:
                 notice='' if sent else 'PDF tetap tersimpan jika lokasi file tersedia.'))
 
 
-def menu_pembayaran_admin():
+def build_billing_controller():
+    """Construct the controller without opening another terminal application."""
     from app import session
-    if not session.punya_role('admin'):
-        return
     from app.repositories import admin_dashboard_repo
     from app.services import billing_service
-    user=session.get_user() or {}
-    controller=BillingController(
+    return BillingController(
         summary=admin_dashboard_repo.ringkasan_admin,
         invoices=billing_service.daftar_tagihan_admin,
         history=billing_service.riwayat_pembayaran_admin,
@@ -512,4 +510,12 @@ def menu_pembayaran_admin():
         make_pdf=billing_service.buat_bukti_pembayaran_pdf,
         send_email=billing_service.kirim_bukti_pembayaran_email,
         is_admin=lambda:session.punya_role('admin'))
-    ConfirmationWorkspace(user.get('nama_lengkap') or user.get('username') or 'Admin').run(controller.run)
+
+
+def menu_pembayaran_admin():
+    from app import session
+    if not session.punya_role('admin'):
+        return
+    user=session.get_user() or {}
+    ConfirmationWorkspace(user.get('nama_lengkap') or user.get('username') or 'Admin').run(
+        build_billing_controller().run)
